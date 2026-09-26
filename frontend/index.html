@@ -1,0 +1,1666 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Cross-Blockchain Passport Authentication</title>
+    <style>
+        * { margin: 0; padding: 0; box-sizing: border-box; }
+        body {
+            font-family: 'Segoe UI', system-ui, -apple-system, sans-serif;
+            background: radial-gradient(circle at 50% 0%, #1e1b4b 0%, #0b0f19 70%);
+            min-height: 100vh;
+            color: #f8fafc;
+        }
+        header {
+            text-align: center;
+            padding: 45px 20px 20px;
+        }
+        header h1 { 
+            font-size: 2.2rem; 
+            background: linear-gradient(135deg, #c4b5fd, #a78bfa, #818cf8);
+            background-clip: text;
+            -webkit-background-clip: text;
+            -webkit-text-fill-color: transparent;
+            margin-bottom: 8px; 
+            letter-spacing: -0.5px;
+        }
+        header p  { color: #94a3b8; font-size: 0.92rem; }
+        header::after {
+            content: ""; display: block; width: 80px; height: 3px; margin: 18px auto 0;
+            background: linear-gradient(90deg, #a78bfa, #6366f1); border-radius: 2px;
+        }
+
+        .status-bar {
+            display: flex;
+            justify-content: center;
+            gap: 16px;
+            margin: 24px auto;
+            flex-wrap: wrap;
+            max-width: 1050px;
+            padding: 0 20px;
+        }
+        .status-card {
+            background: rgba(30, 41, 59, 0.5);
+            backdrop-filter: blur(12px);
+            border: 1px solid rgba(255, 255, 255, 0.08);
+            border-left: 3px solid rgba(255, 255, 255, 0.15);
+            border-radius: 14px;
+            padding: 16px 22px;
+            text-align: center;
+            min-width: 160px;
+            box-shadow: 0 10px 25px -5px rgba(0, 0, 0, 0.3);
+            transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+        }
+        .status-card:hover { transform: translateY(-2px); border-color: rgba(167, 139, 250, 0.3); }
+        .status-card.live {
+            border-left-color: #22c55e;
+            box-shadow: 0 0 20px rgba(34, 197, 94, 0.12), inset 0 1px 0 rgba(255,255,255,0.1);
+        }
+        .status-card.down {
+            border-left-color: #ef4444;
+            box-shadow: 0 0 20px rgba(239, 68, 68, 0.1);
+        }
+        .status-card .label { font-size: 0.72rem; color: #94a3b8; text-transform: uppercase; letter-spacing: 1.2px; font-weight: 600; }
+        .status-card .value { font-size: 1.5rem; font-weight: 700; color: #c4b5fd; margin-top: 6px; transition: color 0.2s; }
+        .status-card .value.bump { color: #22c55e; transform: scale(1.05); }
+        
+        .dot {
+            display: inline-block; width: 8px; height: 8px;
+            border-radius: 50%; background: #22c55e; margin-right: 6px;
+            box-shadow: 0 0 8px currentColor;
+            animation: pulse 2s cubic-bezier(0.4, 0, 0.6, 1) infinite;
+        }
+        @keyframes pulse { 0%,100%{opacity:1} 50%{opacity:.4} }
+
+        .container { max-width: 1050px; margin: 0 auto; padding: 0 20px 60px; }
+
+        .tabs { display: flex; gap: 10px; margin-bottom: 24px; flex-wrap: wrap; }
+        .tab {
+            padding: 11px 22px; border-radius: 10px;
+            border: 1px solid rgba(255, 255, 255, 0.08);
+            background: rgba(30, 41, 59, 0.4);
+            backdrop-filter: blur(8px);
+            color: #94a3b8; cursor: pointer; font-size: 0.88rem; font-weight: 500;
+            transition: all 0.25s ease;
+        }
+        .tab:hover { background: rgba(167, 139, 250, 0.1); color: #c4b5fd; transform: translateY(-2px); border-color: rgba(167, 139, 250, 0.2); }
+        .tab.active {
+            background: linear-gradient(135deg, rgba(139, 92, 246, 0.2), rgba(99, 102, 241, 0.2));
+            color: #c4b5fd;
+            border-color: rgba(167, 139, 250, 0.4);
+            box-shadow: 0 4px 15px rgba(109, 40, 217, 0.2);
+            font-weight: 600;
+        }
+
+        .panel { display: none; }
+        .panel.active { display: block; animation: fadeIn 0.3s ease-out; }
+        @keyframes fadeIn { from { opacity: 0; transform: translateY(4px); } to { opacity: 1; transform: translateY(0); } }
+
+        .card {
+            background: rgba(30, 41, 59, 0.45);
+            backdrop-filter: blur(16px);
+            border: 1px solid rgba(255, 255, 255, 0.08);
+            border-radius: 18px; padding: 32px; margin-bottom: 24px;
+            box-shadow: 0 20px 40px -15px rgba(0, 0, 0, 0.5);
+        }
+        .card h2 { font-size: 1.15rem; color: #c4b5fd; margin-bottom: 24px; font-weight: 600; display: flex; align-items: center; gap: 10px; }
+
+        .form-group { margin-bottom: 18px; }
+        .form-group label { display: block; font-size: 0.82rem; color: #94a3b8; margin-bottom: 6px; font-weight: 500; }
+        .form-group input {
+            width: 100%; padding: 12px 16px; border-radius: 10px;
+            border: 1px solid rgba(255, 255, 255, 0.1);
+            background: rgba(15, 23, 42, 0.6); color: #fff;
+            font-size: 0.92rem; outline: none; transition: all 0.2s;
+        }
+        .form-group input:focus { border-color: #a78bfa; box-shadow: 0 0 0 3px rgba(167, 139, 250, 0.15); }
+        .form-group input.valid   { border-color: #22c55e; }
+        .form-group input.invalid { border-color: #ef4444; }
+        .form-hint { font-size: 0.75rem; color: #64748b; margin-top: 6px; }
+        .form-hint.ok  { color: #22c55e; }
+        .form-hint.bad { color: #ef4444; }
+
+        .empty-state { text-align: center; padding: 50px 20px; color: #64748b; }
+        .empty-state .icon { font-size: 2.5rem; margin-bottom: 12px; opacity: 0.5; }
+        .empty-state .msg  { font-size: 0.9rem; color: #94a3b8; }
+
+        .activity-log { max-width: 1050px; margin: 0 auto 12px; padding: 0 20px; }
+        .activity-toast {
+            background: rgba(30, 41, 59, 0.8);
+            backdrop-filter: blur(12px);
+            border: 1px solid rgba(255, 255, 255, 0.1);
+            border-left: 3px solid #22c55e;
+            border-radius: 10px; padding: 12px 18px; margin-bottom: 8px;
+            font-size: 0.82rem; color: #e2e8f0;
+            display: flex; justify-content: space-between; align-items: center;
+            box-shadow: 0 10px 25px -5px rgba(0,0,0,0.3);
+            animation: slideIn 0.3s cubic-bezier(0.16, 1, 0.3, 1);
+        }
+        .activity-toast .tx { font-family: monospace; color: #a78bfa; font-size: 0.75rem; background: rgba(167,139,250,0.1); padding: 2px 6px; border-radius: 4px; }
+        @keyframes slideIn { from { opacity: 0; transform: translateY(-8px); } to { opacity: 1; transform: translateY(0); } }
+
+        .btn {
+            width: 100%; padding: 14px; border-radius: 10px; border: none;
+            background: linear-gradient(135deg, #8b5cf6, #6366f1);
+            color: #fff; font-size: 0.95rem; font-weight: 600;
+            cursor: pointer; transition: all 0.2s; margin-top: 6px;
+            box-shadow: 0 4px 15px rgba(99, 102, 241, 0.3);
+        }
+        .btn:hover   { opacity: 0.9; transform: translateY(-1px); box-shadow: 0 6px 20px rgba(99, 102, 241, 0.4); }
+        .btn:active  { transform: translateY(0); }
+        .btn:disabled { opacity: 0.5; cursor: not-allowed; transform: none; box-shadow: none; }
+
+        .result { margin-top: 24px; padding: 20px; border-radius: 12px; font-size: 0.88rem; display: none; }
+        .result.show    { display: block; animation: slideIn 0.3s ease-out; }
+        .result.success { background: rgba(34, 197, 94, 0.1); border: 1px solid rgba(34, 197, 94, 0.3); }
+        .result.error   { background: rgba(239, 68, 68, 0.1); border: 1px solid rgba(239, 68, 68, 0.3); }
+        .result.info    { background: rgba(139, 92, 246, 0.1); border: 1px solid rgba(139, 92, 246, 0.3); }
+
+        .result-title { font-size: 1.05rem; font-weight: 600; margin-bottom: 12px; color: #f8fafc; }
+        .result-row {
+            display: flex; justify-content: space-between;
+            padding: 8px 0; border-bottom: 1px solid rgba(255, 255, 255, 0.06); font-size: 0.85rem;
+        }
+        .result-row:last-child { border-bottom: none; }
+        .result-row .key { color: #94a3b8; }
+        .result-row .val { color: #f8fafc; font-weight: 500; word-break: break-all; text-align: right; max-width: 65%; font-family: monospace; }
+
+        .badge { display: inline-block; padding: 4px 12px; border-radius: 20px; font-size: 0.75rem; font-weight: 600; text-transform: uppercase; letter-spacing: 0.5px; }
+        .badge.approved { background: rgba(34, 197, 94, 0.15); color: #4ade80; border: 1px solid rgba(34, 197, 94, 0.3); }
+        .badge.rejected { background: rgba(239, 68, 68, 0.15); color: #f87171; border: 1px solid rgba(239, 68, 68, 0.3); }
+
+        .citizen-card {
+            background: rgba(15, 23, 42, 0.4);
+            border: 1px solid rgba(255, 255, 255, 0.06);
+            border-radius: 12px; padding: 16px 20px; margin-bottom: 12px;
+            display: flex; justify-content: space-between; align-items: center;
+            transition: all 0.2s;
+        }
+        .citizen-card:hover { border-color: rgba(167, 139, 250, 0.2); background: rgba(15, 23, 42, 0.6); }
+        .citizen-name { font-weight: 600; color: #f8fafc; font-size: 0.95rem; }
+        .citizen-meta { font-size: 0.8rem; color: #94a3b8; margin-top: 4px; }
+        .citizen-id   { font-size: 0.8rem; color: #c4b5fd; font-family: monospace; background: rgba(167, 139, 250, 0.1); padding: 2px 8px; border-radius: 6px; }
+
+        .app-card {
+            background: rgba(15, 23, 42, 0.4);
+            border: 1px solid rgba(255, 255, 255, 0.06);
+            border-left: 3px solid #8b5cf6;
+            border-radius: 12px; padding: 16px 20px; margin-bottom: 12px; font-size: 0.88rem;
+        }
+        .app-card .app-title { font-weight: 600; color: #c4b5fd; margin-bottom: 6px; display: flex; justify-content: space-between; align-items: center; }
+        .hash-text { font-family: monospace; font-size: 0.75rem; color: #64748b; word-break: break-all; background: rgba(0,0,0,0.2); padding: 4px 8px; border-radius: 6px; margin-top: 6px; }
+        .loading { text-align: center; color: #94a3b8; padding: 30px; font-size: 0.9rem; }
+
+        .tx-box {
+            background: rgba(15, 23, 42, 0.8); border: 1px solid rgba(255,255,255,0.06); border-radius: 8px;
+            padding: 12px 16px; margin-top: 12px; font-family: monospace;
+            font-size: 0.78rem; color: #4ade80; word-break: break-all;
+        }
+        .tx-label { font-size: 0.72rem; color: #94a3b8; margin-bottom: 4px; text-transform: uppercase; letter-spacing: 0.5px; }
+
+        :root {
+            --ink: #eef2ff;
+            --muted: #8b9bb5;
+            --panel: rgba(17, 26, 48, 0.72);
+            --line: rgba(148, 163, 184, 0.16);
+            --cyan: #4de3d5;
+            --amber: #ffc857;
+            --coral: #ff7b72;
+        }
+        body {
+            background: #080d18;
+            background-image: radial-gradient(circle at 12% 8%, rgba(36, 112, 126, .26), transparent 31%),
+                radial-gradient(circle at 90% 20%, rgba(255, 200, 87, .13), transparent 26%),
+                linear-gradient(135deg, #080d18 0%, #0e1626 52%, #111827 100%);
+            overflow-x: hidden;
+        }
+        body::before {
+            content: "";
+            position: fixed;
+            inset: 0;
+            pointer-events: none;
+            opacity: .28;
+            background-image: linear-gradient(rgba(255,255,255,.035) 1px, transparent 1px), linear-gradient(90deg, rgba(255,255,255,.035) 1px, transparent 1px);
+            background-size: 42px 42px;
+            mask-image: linear-gradient(to bottom, black, transparent 70%);
+        }
+        header {
+            max-width: 1050px;
+            margin: 0 auto;
+            padding: 58px 20px 24px;
+            text-align: left;
+            position: relative;
+        }
+        header::before {
+            content: "IDENTITY // NETWORK 07";
+            display: block;
+            color: var(--cyan);
+            font: 700 .68rem/1 monospace;
+            letter-spacing: 2px;
+            margin-bottom: 18px;
+        }
+        header h1 {
+            max-width: 720px;
+            width: fit-content;
+            display: inline-block;
+            font-family: Georgia, 'Times New Roman', serif;
+            font-size: clamp(2.7rem, 7vw, 5.4rem);
+            line-height: .98;
+            letter-spacing: -2px;
+            background: linear-gradient(120deg, #ffffff 5%, #9ee9e1 48%, #ffc857 100%);
+            background-clip: text;
+            -webkit-background-clip: text;
+            -webkit-text-fill-color: transparent;
+        }
+        header p { max-width: 560px; margin-top: 18px; color: #a8b7cc; font-size: 1rem; line-height: 1.7; }
+        header::after { width: 150px; height: 2px; margin: 24px 0 0; background: linear-gradient(90deg, var(--cyan), transparent); }
+        .hero-mark { position: absolute; right: 32px; top: 58px; width: 170px; height: 170px; border: 1px solid rgba(77,227,213,.28); border-radius: 50%; opacity: .8; }
+        .hero-mark::before, .hero-mark::after { content: ""; position: absolute; inset: 18px; border: 1px dashed rgba(255,200,87,.42); border-radius: 50%; }
+        .hero-mark::after { inset: 52px; background: rgba(77,227,213,.08); border: 5px solid rgba(77,227,213,.18); box-shadow: 0 0 35px rgba(77,227,213,.18); }
+        .status-bar { justify-content: stretch; max-width: 1050px; margin: 20px auto 28px; }
+        .status-card { flex: 1 1 150px; min-width: 145px; padding: 17px 18px; border-radius: 8px; background: var(--panel); border-color: var(--line); text-align: left; }
+        .status-card .value { color: var(--ink); font-family: Georgia, serif; font-size: 1.7rem; }
+        .status-card.live { border-left-color: var(--cyan); }
+        .status-card.down { border-left-color: var(--coral); }
+        .container { position: relative; z-index: 1; }
+        .dashboard-strip { display: grid; grid-template-columns: 1.35fr .65fr; gap: 18px; margin-bottom: 25px; }
+        .network-map, .quick-panel { background: rgba(11, 20, 37, .72); border: 1px solid var(--line); border-radius: 8px; padding: 22px; box-shadow: 0 20px 45px rgba(0,0,0,.2); }
+        .section-kicker { color: var(--cyan); font: 700 .67rem/1 monospace; letter-spacing: 1.7px; text-transform: uppercase; }
+        .network-map h2, .quick-panel h2 { font: 1.45rem Georgia, serif; color: var(--ink); margin: 9px 0 18px; }
+        .telemetry-head { display: flex; align-items: center; justify-content: space-between; gap: 12px; }
+        .live-badge { display: inline-flex; align-items: center; gap: 7px; padding: 6px 9px; border: 1px solid rgba(77,227,213,.3); border-radius: 4px; color: var(--cyan); font: 700 .63rem monospace; letter-spacing: 1px; }
+        .live-badge::before { content: ""; width: 7px; height: 7px; border-radius: 50%; background: var(--cyan); box-shadow: 0 0 10px var(--cyan); animation: pulse 1.3s ease-in-out infinite; }
+        .telemetry-foot { display: flex; justify-content: space-between; gap: 12px; margin-top: 11px; color: #70859e; font: .66rem monospace; text-transform: uppercase; letter-spacing: .8px; }
+        .telemetry-foot strong { color: var(--cyan); font-weight: 500; }
+        .chain-line { display: flex; align-items: center; gap: 10px; }
+        .chain-node { flex: 0 1 155px; padding: 15px; border: 1px solid rgba(77,227,213,.3); background: rgba(77,227,213,.06); border-radius: 6px; }
+        .chain-node strong { display: block; color: #fff; font-size: .9rem; margin-bottom: 5px; }
+        .chain-node span { color: var(--muted); font: .7rem monospace; }
+        .chain-connector { flex: 1; height: 1px; position: relative; background: linear-gradient(90deg, var(--cyan), var(--amber)); }
+        .chain-connector::after { content: "◆"; position: absolute; right: 0; top: -8px; color: var(--amber); font-size: .7rem; }
+        .network-graphic { position: relative; height: 190px; margin: 4px 0 20px; overflow: hidden; border: 1px solid rgba(77,227,213,.14); border-radius: 7px; background: radial-gradient(circle at center, rgba(77,227,213,.11), transparent 33%), rgba(2, 9, 20, .48); }
+        .network-graphic::before, .network-graphic::after { content: ""; position: absolute; border: 1px solid rgba(77,227,213,.16); border-radius: 50%; left: 50%; top: 50%; transform: translate(-50%, -50%); }
+        .network-graphic::before { width: 145px; height: 145px; }
+        .network-graphic::after { width: 82px; height: 82px; border-color: rgba(255,200,87,.24); }
+        .network-core { position: absolute; left: 50%; top: 50%; z-index: 2; width: 52px; height: 52px; transform: translate(-50%, -50%); border: 2px solid var(--cyan); border-radius: 50%; background: #102b37; color: #fff; display: grid; place-items: center; font: 700 .65rem monospace; letter-spacing: .5px; box-shadow: 0 0 0 7px rgba(77,227,213,.07), 0 0 30px rgba(77,227,213,.4); animation: corePulse 2.8s ease-in-out infinite; }
+        .network-core::after { content: ""; position: absolute; inset: -12px; border: 1px solid rgba(77,227,213,.32); border-radius: 50%; animation: ripple 2.8s ease-out infinite; }
+        .orbit-node { position: absolute; z-index: 3; display: grid; place-items: center; width: 34px; height: 34px; border: 1px solid rgba(255,255,255,.35); border-radius: 50%; background: #17263b; color: var(--amber); font-size: .82rem; box-shadow: 0 0 18px rgba(255,200,87,.18); }
+        .orbit-node::after { content: ""; position: absolute; width: 7px; height: 7px; border-radius: 50%; background: var(--cyan); box-shadow: 0 0 11px var(--cyan); }
+        .orbit-node.one { left: 17%; top: 23%; }
+        .orbit-node.two { right: 18%; top: 20%; color: var(--cyan); }
+        .orbit-node.three { left: 23%; bottom: 17%; color: #ff8c7a; }
+        .orbit-node.four { right: 21%; bottom: 18%; }
+        .graphic-line { position: absolute; height: 1px; width: 38%; background: linear-gradient(90deg, transparent, rgba(77,227,213,.45), transparent); transform-origin: left center; }
+        .graphic-line.a { left: 28%; top: 38%; transform: rotate(20deg); }
+        .graphic-line.b { right: 28%; top: 37%; transform: rotate(160deg); }
+        .graphic-line.c { left: 31%; bottom: 35%; transform: rotate(-18deg); }
+        .graphic-line.d { right: 30%; bottom: 34%; transform: rotate(198deg); }
+        .graphic-label { position: absolute; bottom: 10px; left: 14px; color: #8ea3b9; font: .64rem monospace; letter-spacing: 1px; text-transform: uppercase; }
+        @keyframes corePulse { 50% { box-shadow: 0 0 0 12px rgba(77,227,213,.03), 0 0 38px rgba(77,227,213,.58); } }
+        @keyframes ripple { 0% { opacity: .75; transform: scale(.8); } 100% { opacity: 0; transform: scale(1.45); } }
+        .quick-actions { display: grid; grid-template-columns: 1fr 1fr; gap: 9px; }
+        .quick-action { border: 1px solid var(--line); border-radius: 5px; padding: 12px 10px; background: rgba(255,255,255,.035); color: #c9d5e7; cursor: pointer; text-align: left; font-size: .78rem; transition: .2s; }
+        .quick-action:hover { border-color: var(--cyan); color: #fff; transform: translateY(-2px); }
+        .quick-action b { display: block; color: var(--amber); font-size: 1.15rem; margin-bottom: 5px; }
+        .tabs { gap: 7px; margin-bottom: 20px; border-bottom: 1px solid var(--line); padding-bottom: 10px; }
+        .tab { border-radius: 5px; padding: 10px 14px; background: transparent; border-color: transparent; }
+        .tab.active { background: rgba(77,227,213,.1); color: var(--cyan); border-color: rgba(77,227,213,.25); box-shadow: none; }
+        .card { background: var(--panel); border: 1px solid var(--line); border-radius: 8px; padding: 28px; }
+        .card h2 { color: var(--ink); font-family: Georgia, serif; font-size: 1.35rem; }
+        .btn { border-radius: 5px; background: linear-gradient(100deg, #168f91, #2bbfae); box-shadow: 0 8px 22px rgba(43,191,174,.2); }
+        .btn:hover { box-shadow: 0 10px 28px rgba(43,191,174,.32); }
+        .form-group input { border-radius: 5px; background: rgba(3, 8, 18, .55); }
+        .activity-toast { border-radius: 5px; border-left-color: var(--cyan); }
+        @media (max-width: 720px) {
+            header { padding-top: 38px; }
+            header h1 { font-size: 3.25rem; }
+            .hero-mark { width: 90px; height: 90px; right: 20px; top: 40px; opacity: .45; }
+            .dashboard-strip { grid-template-columns: 1fr; }
+            .chain-line { align-items: stretch; flex-direction: column; }
+            .chain-connector { width: 1px; height: 22px; margin-left: 20px; background: linear-gradient(180deg, var(--cyan), var(--amber)); }
+            .chain-connector::after { right: -5px; top: 13px; }
+            .tab { flex: 1 1 45%; }
+            .card { padding: 21px 16px; }
+        }
+
+        /* Compact control-room treatment */
+        body {
+            font-family: 'Trebuchet MS', 'Segoe UI', sans-serif;
+            background: #f4f1ea;
+            color: #17221f;
+            background-image: linear-gradient(rgba(23,34,31,.035) 1px, transparent 1px), linear-gradient(90deg, rgba(23,34,31,.035) 1px, transparent 1px);
+            background-size: 32px 32px;
+        }
+        body::before { display: none; }
+        header {
+            max-width: 1180px;
+            padding: 34px 24px 20px;
+            display: grid;
+            grid-template-columns: 1fr auto;
+            align-items: end;
+            gap: 24px;
+        }
+        header::before { color: #287d72; margin-bottom: 10px; }
+        header h1 {
+            font-family: Georgia, 'Times New Roman', serif;
+            font-size: clamp(2.4rem, 5vw, 4.8rem);
+            line-height: .94;
+            letter-spacing: -2px;
+            background: none;
+            -webkit-text-fill-color: #17221f;
+            color: #17221f;
+        }
+        header p { color: #65736d; margin-top: 14px; line-height: 1.55; }
+        header::after { grid-column: 1; width: 76px; height: 4px; margin: 2px 0 0; background: #e0a52f; }
+        .hero-mark { position: relative; right: auto; top: auto; width: 132px; height: 132px; border-color: rgba(40,125,114,.34); opacity: 1; }
+        .hero-mark::before { border-color: rgba(224,165,47,.58); }
+        .hero-mark::after { background: rgba(40,125,114,.1); border-color: rgba(40,125,114,.3); box-shadow: 0 0 35px rgba(40,125,114,.2); }
+        header::before { content: 'GOVERNMENT DIGITAL IDENTITY AUTHORITY'; letter-spacing: 1.35px; }
+        .hero-mark { display: grid; place-items: center; border-radius: 12px; }
+        .hero-mark::before { inset: auto; width: 48px; height: 55px; border: 0; border-radius: 9px 9px 16px 16px; background: #287d72; clip-path: polygon(50% 0, 92% 15%, 86% 66%, 50% 100%, 14% 66%, 8% 15%); }
+        .hero-mark::after { content: '✓'; inset: auto; width: auto; height: auto; border: 0; background: transparent; box-shadow: none; color: #fff; font: 700 1.65rem/1 'Segoe UI', sans-serif; transform: translateY(-2px); }
+        .hero-mark::marker { display: none; }
+        header p { max-width: 650px; }
+        .status-bar { max-width: 1180px; margin: 10px auto 24px; padding: 0 24px; gap: 10px; }
+        .status-card { background: #fffdf8; border: 1px solid #d9dfd9; border-left: 4px solid #cfd8d2; border-radius: 4px; box-shadow: 0 4px 15px rgba(23,34,31,.06); }
+        .status-card .label { color: #78867f; }
+        .status-card .value { color: #17221f; font-family: Georgia, serif; }
+        .status-card.live { border-left-color: #287d72; box-shadow: 0 4px 15px rgba(40,125,114,.1); }
+        .container { max-width: 1180px; padding: 0 24px 52px; }
+        .dashboard-strip { grid-template-columns: 1fr; gap: 14px; }
+        .network-map, .quick-panel, .card { background: #fffdf8; border: 1px solid #d9dfd9; border-radius: 4px; box-shadow: 0 8px 26px rgba(23,34,31,.07); }
+        .network-map, .quick-panel { padding: 20px; }
+        .section-kicker { color: #287d72; }
+        .network-map h2, .quick-panel h2, .card h2 { color: #17221f; font-family: Georgia, serif; }
+        .network-map h2, .quick-panel h2 { margin-bottom: 14px; }
+        .network-graphic { height: 154px; background: #eef5f0; border-color: #c7ddd4; }
+        .network-core { background: #287d72; border-color: #287d72; box-shadow: 0 0 0 7px rgba(40,125,114,.1), 0 0 24px rgba(40,125,114,.25); }
+        .orbit-node { background: #fffdf8; color: #287d72; }
+        .chain-node { border-color: #b7d6cb; background: #f1f7f3; }
+        .chain-node strong { color: #17221f; }
+        .quick-action { background: #f4f1ea; color: #43534d; border-color: #d9dfd9; }
+        .quick-action:hover { border-color: #287d72; color: #17221f; }
+        .quick-action b { color: #c48818; }
+        .tabs { border-bottom-color: #cfd8d2; }
+        .tab { color: #718078; font-weight: 700; }
+        .tab.active { background: #287d72; color: #fff; border-color: #287d72; }
+        .card { padding: 24px; }
+        .card h2 { font-size: 1.5rem; margin-bottom: 20px; }
+        .form-group label { color: #53645c; }
+        .form-group input { background: #f7f8f4; color: #17221f; border-color: #cfd8d2; border-radius: 4px; }
+        .form-group input:focus { border-color: #287d72; box-shadow: 0 0 0 3px rgba(40,125,114,.12); }
+        .form-hint { color: #87938d; }
+        .btn { background: #287d72; border-radius: 4px; box-shadow: 0 6px 16px rgba(40,125,114,.2); }
+        .btn:hover { background: #1f675e; box-shadow: 0 8px 20px rgba(40,125,114,.28); }
+        .result.success { background: #edf7f0; border-color: #b6d8c1; }
+        .result.error { background: #fff0ed; border-color: #efb8ad; }
+        .result-row { border-bottom-color: #d9dfd9; }
+        .result-row .key { color: #718078; }
+        .result-row .val { color: #17221f; }
+        .citizen-card, .app-card { background: #f7f8f4; border-color: #d9dfd9; }
+        .citizen-card:hover { background: #eef5f0; border-color: #a9cfc1; }
+        .citizen-name, .app-card .app-title { color: #17221f; }
+        .citizen-meta { color: #718078; }
+        .citizen-id { color: #287d72; background: #e3f0eb; }
+        .app-card { border-left-color: #287d72; }
+        .hash-text, .tx-box { background: #edf1ed; color: #287d72; }
+        .tx-label { color: #718078; }
+        .activity-toast { background: #fffdf8; color: #43534d; border-color: #d9dfd9; border-left-color: #287d72; }
+        .activity-toast .tx { color: #287d72; background: #e3f0eb; }
+        @media (max-width: 720px) {
+            header { display: block; padding-top: 28px; }
+            header h1 { font-size: 3.1rem; }
+            .hero-mark { position: absolute; width: 86px; height: 86px; right: 20px; top: 30px; opacity: .7; }
+            .status-bar { padding: 0 16px; }
+            .container { padding: 0 16px 42px; }
+        }
+
+        /* Official service masthead inspired by the reference layout */
+        .utility-bar { background: #f1e8c9; color: #26332f; border-bottom: 1px solid #e2d7b4; font-size: .72rem; }
+        .utility-inner { max-width: 1180px; min-height: 32px; margin: 0 auto; padding: 0 24px; display: flex; align-items: center; justify-content: space-between; gap: 18px; }
+        .utility-inner nav { display: flex; align-items: center; gap: 14px; }
+        .utility-inner a { color: #26332f; text-decoration: none; }
+        .utility-inner a:hover { color: #287d72; text-decoration: underline; }
+        .utility-inner button { padding: 1px 4px; border: 0; background: transparent; color: #26332f; cursor: pointer; font-size: .72rem; }
+        .utility-inner button:hover { color: #287d72; text-decoration: underline; }
+        .text-size-control { font-weight: 700 !important; }
+        .about-dialog { position: fixed; inset: 0; z-index: 20; display: none; place-items: center; padding: 20px; background: rgba(9, 20, 27, .58); }
+        .about-dialog.open { display: grid; }
+        .about-card { width: min(560px, 100%); padding: 28px; background: #fffdf8; border: 1px solid #d9dfd9; border-top: 4px solid #287d72; border-radius: 8px; box-shadow: 0 22px 60px rgba(9, 20, 27, .25); color: #17221f; }
+        .about-card h2 { margin-bottom: 12px; color: #16234f; font: 700 1.45rem Georgia, 'Times New Roman', serif; }
+        .about-card p { color: #65736d; font-size: .9rem; line-height: 1.65; }
+        .about-card p + p { margin-top: 10px; }
+        .about-dialog { overflow-y: auto; }
+        .about-card h3 { margin: 20px 0 7px; color: #287d72; font-size: .9rem; text-transform: uppercase; letter-spacing: .8px; }
+        .about-card ul { margin: 8px 0 0 18px; color: #65736d; font-size: .86rem; line-height: 1.6; }
+        .about-card table { width: 100%; margin-top: 8px; border-collapse: collapse; color: #65736d; font-size: .82rem; }
+        .about-card th, .about-card td { padding: 8px 6px; border-bottom: 1px solid #d9dfd9; text-align: left; vertical-align: top; }
+        .about-card th { color: #17221f; font-weight: 700; }
+        .about-close { display: block; margin: 20px 0 0 auto; padding: 9px 18px; border: 1px solid #287d72; border-radius: 5px; background: #287d72; color: #fff; cursor: pointer; font-weight: 700; }
+        .utility-contact { margin-left: 10px; font-weight: 650; }
+        header { max-width: none; padding: 14px max(24px, calc((100% - 1180px) / 2)) 12px; display: flex; align-items: center; justify-content: space-between; gap: 30px; background: #fffdf8; border-bottom: 1px solid #d9dfd9; }
+        header::before, header::after { display: none; }
+        .brand-lockup { display: flex; align-items: center; gap: 12px; min-width: 390px; }
+        .brand-copy { min-width: 0; }
+        .hero-mark { position: relative; right: auto; top: auto; flex: 0 0 58px; width: 58px; height: 66px; border: 0; border-radius: 0; background: transparent; opacity: 1; }
+        .hero-mark::before { inset: 0; width: 58px; height: 66px; border: 0; border-radius: 10px 10px 19px 19px; background: #287d72; clip-path: polygon(50% 0, 92% 15%, 86% 66%, 50% 100%, 14% 66%, 8% 15%); }
+        .hero-mark::after { content: '✓'; inset: 0; width: auto; height: auto; border: 0; background: transparent; box-shadow: none; display: grid; place-items: center; color: #fff; font: 700 1.7rem/1 'Segoe UI', sans-serif; transform: translateY(-2px); }
+        header h1 { margin: 0; font-family: Georgia, 'Times New Roman', serif; font-size: 1.72rem; line-height: 1.02; letter-spacing: -.8px; color: #16234f; -webkit-text-fill-color: #16234f; background: none; }
+        header p { margin: 5px 0 0; color: #64716b; font-size: .72rem; line-height: 1.35; max-width: 480px; }
+        .primary-nav { display: flex; align-items: center; justify-content: flex-end; gap: 5px; flex-wrap: wrap; }
+        .primary-nav a, .primary-nav button { color: #26332f; font: 600 .78rem 'Segoe UI', sans-serif; text-decoration: none; white-space: nowrap; }
+        .primary-nav a { padding: 13px 11px 11px; border-bottom: 2px solid transparent; }
+        .primary-nav a:hover, .primary-nav a.active { color: #162d82; border-bottom-color: #162d82; }
+        .service-page .primary-nav a { display: none; }
+        .primary-nav button { cursor: pointer; }
+        .nav-login, .nav-register { min-width: 82px; padding: 10px 15px; border-radius: 6px; }
+        .nav-login { margin-left: 4px; border: 1px solid #168f91; background: #fff; color: #16234f !important; }
+        .nav-login:hover { transform: translateY(-1px); }
+        .nav-account { min-width: 42px; width: 42px; height: 42px; padding: 0; border: 1px solid #287d72; border-radius: 50%; background: #e3f0eb; color: #287d72; cursor: pointer; font-size: 1.1rem; }
+        .nav-account:hover { background: #d2e9e0; }
+        .account-menu-wrap { position: relative; }
+        .account-menu { position: absolute; z-index: 10; top: calc(100% + 9px); right: 0; width: 220px; padding: 14px; background: #fffdf8; border: 1px solid #d9dfd9; border-radius: 6px; box-shadow: 0 10px 24px rgba(23,34,31,.14); }
+        .account-menu[hidden] { display: none; }
+        .account-menu-user { display: block; overflow: hidden; margin-bottom: 10px; color: #17221f; font-size: .78rem; font-weight: 700; text-overflow: ellipsis; white-space: nowrap; }
+        .account-menu-role { display: block; margin-top: 3px; color: #78867f; font-size: .68rem; font-weight: 500; }
+        .account-logout { width: 100%; padding: 8px 10px; border: 1px solid #d9dfd9; border-radius: 4px; background: #f4f1ea; color: #287d72; cursor: pointer; font: 700 .75rem 'Segoe UI', sans-serif; text-align: left; }
+        .account-logout:hover { border-color: #287d72; background: #e3f0eb; }
+        .auth-page > *:not(.auth-screen), .auth-page .site-footer { display: none; }
+        .auth-screen { display: none; min-height: calc(100vh - 125px); place-items: center; padding: 42px 20px; background: #f4f1ea; }
+        .auth-card { width: min(470px, 100%); padding: 30px; background: #fffdf8; border: 1px solid #d9dfd9; border-top: 4px solid #287d72; border-radius: 8px; box-shadow: 0 14px 34px rgba(23,34,31,.1); }
+        .auth-card h2 { margin: 0; color: #17221f; font: 700 1.55rem Georgia, 'Times New Roman', serif; }
+        .auth-card > p { margin: 9px 0 22px; color: #65736d; font-size: .83rem; line-height: 1.5; }
+        .auth-role-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; }
+        .auth-role { padding: 18px 14px; border: 1px solid #d9dfd9; border-radius: 6px; background: #fbfcf8; color: #17221f; cursor: pointer; text-align: left; }
+        .auth-role:hover { border-color: #72b8aa; background: #f1f8f4; }
+        .auth-role strong { display: block; color: #287d72; font-size: .95rem; }
+        .auth-role span { display: block; margin-top: 7px; color: #65736d; font-size: .75rem; line-height: 1.4; }
+        .auth-form { display: grid; gap: 13px; }
+        .auth-form label { color: #53645c; font-size: .78rem; font-weight: 700; }
+        .auth-form input { width: 100%; margin-top: 5px; padding: 12px; border: 1px solid #cfd8d2; border-radius: 4px; background: #f7f8f4; color: #17221f; font: inherit; }
+        .auth-form input:focus { outline: none; border-color: #287d72; box-shadow: 0 0 0 3px rgba(40,125,114,.12); }
+        .auth-submit { width: 100%; margin-top: 5px; padding: 12px; border: 0; border-radius: 4px; background: #287d72; color: #fff; cursor: pointer; font-weight: 700; }
+        .auth-submit:hover { background: #1f675e; }
+        .auth-back { display: inline-block; margin-bottom: 18px; color: #287d72; font-size: .78rem; font-weight: 700; text-decoration: none; }
+        .auth-back:hover { text-decoration: underline; }
+        .auth-note { margin-top: 16px; color: #8a9790; font-size: .7rem; line-height: 1.45; }
+        .auth-link { padding: 0; border: 0; background: none; color: #287d72; cursor: pointer; font: inherit; font-weight: 750; text-decoration: underline; }
+        .auth-error { color: #c65a4c; font-size: .75rem; }
+        .auth-page .auth-screen { display: grid; }
+        .role-applicant .service-card[data-service="citizens"], .role-applicant .service-card[data-service="applications"] { display: none; }
+        .role-developer .service-card[data-service="register"], .role-developer .service-card[data-service="apply"], .role-developer .service-card[data-service="progress"] { display: none; }
+        .role-developer .how-it-works, .role-developer .why-identigate { display: none; }
+        .role-guest .service-card[data-service="citizens"], .role-guest .service-card[data-service="applications"] { display: none; }
+        .role-guest .service-card[data-service="register"], .role-guest .service-card[data-service="apply"], .role-guest .service-card[data-service="progress"] { position: relative; }
+        .role-guest .service-card[data-service="register"]::after, .role-guest .service-card[data-service="apply"]::after, .role-guest .service-card[data-service="progress"]::after { content: 'Login required'; position: absolute; right: 10px; top: 10px; padding: 3px 7px; border-radius: 999px; background: #f4e8c1; color: #8a6718; font-size: .6rem; font-weight: 700; pointer-events: none; }
+        .service-banner { width: 100%; max-width: none; min-height: 300px; margin: 22px 0; padding: 42px max(48px, calc((100% - 1180px) / 2)); display: flex; align-items: center; position: relative; overflow: hidden; background: linear-gradient(105deg, #13224d 0%, #243d68 48%, #287d72 100%); color: #fff; box-shadow: 0 10px 26px rgba(23,34,31,.14); }
+        .service-banner::before { display: none; }
+        .service-banner::after { content: '✓'; position: absolute; right: 12%; top: 38px; display: grid; place-items: center; width: 92px; height: 92px; border: 2px solid rgba(255,255,255,.45); border-radius: 50%; color: #f4d36d; font-size: 3.3rem; font-weight: 300; transform: rotate(-8deg); }
+        .banner-copy { position: relative; z-index: 1; max-width: 570px; padding-right: 20px; }
+        .banner-image { position: absolute; z-index: 1; right: 0; top: 0; width: min(72%, 860px); height: 100%; overflow: hidden; border: 0; border-radius: 0; background: transparent; box-shadow: none; -webkit-mask-image: linear-gradient(to right, transparent 0%, transparent 16%, rgba(0,0,0,.35) 28%, #000 46%, #000 100%); mask-image: linear-gradient(to right, transparent 0%, transparent 16%, rgba(0,0,0,.35) 28%, #000 46%, #000 100%); }
+        .banner-image::after { content: ''; position: absolute; inset: 0; pointer-events: none; background: linear-gradient(90deg, #13224d 0%, #13224d 34%, rgba(19,34,77,.82) 50%, rgba(19,34,77,.28) 68%, transparent 82%); }
+        .banner-image img { width: 100%; height: 100%; display: block; object-fit: contain; object-position: right center; mix-blend-mode: normal; opacity: .97; }
+        .banner-kicker { margin-bottom: 12px; color: #f4d36d; font-size: .72rem; font-weight: 750; letter-spacing: 1.8px; text-transform: uppercase; }
+        .service-banner h2 { margin: 0; color: #fff; font: 700 clamp(1.65rem, 3.2vw, 2.55rem)/1.12 Georgia, 'Times New Roman', serif; }
+        .service-banner p { margin-top: 12px; color: rgba(255,255,255,.82); font-size: .9rem; line-height: 1.55; }
+        .services-panel { padding: 22px; background: #fffdf8; border: 1px solid #d9dfd9; border-radius: 4px; box-shadow: 0 8px 26px rgba(23,34,31,.07); }
+        .services-heading { display: flex; align-items: end; justify-content: space-between; gap: 20px; margin-bottom: 16px; }
+        .services-heading h2 { margin: 5px 0 0; color: #17221f; font: 700 1.45rem Georgia, 'Times New Roman', serif; }
+        .services-heading p { max-width: 410px; color: #65736d; font-size: .78rem; line-height: 1.45; text-align: right; }
+        .service-grid { display: grid; grid-template-columns: repeat(5, 1fr); gap: 10px; }
+        .service-card { min-height: 150px; padding: 16px; display: flex; flex-direction: column; align-items: flex-start; border: 1px solid #d9dfd9; border-radius: 6px; background: #fbfcf8; text-align: left; cursor: pointer; transition: .2s; }
+        .service-card:hover { border-color: #72b8aa; background: #f1f8f4; transform: translateY(-2px); box-shadow: 0 7px 16px rgba(40,125,114,.1); }
+        .service-icon { display: grid; place-items: center; width: 34px; height: 34px; margin-bottom: 12px; border-radius: 8px; background: #e3f0eb; color: #287d72; font-size: 1.25rem; }
+        .service-card strong { color: #17221f; font-size: .9rem; }
+        .service-card span { margin-top: 7px; color: #65736d; font-size: .74rem; line-height: 1.45; }
+        .service-card small { margin-top: auto; padding-top: 11px; color: #287d72; font-size: .68rem; font-weight: 700; }
+        .progress-form { display: flex; gap: 10px; align-items: end; margin-bottom: 24px; }
+        .progress-form .form-group { flex: 1; margin-bottom: 0; }
+        .progress-form .btn { width: auto; min-width: 150px; margin-top: 0; }
+        .progress-summary { padding: 16px; margin-bottom: 22px; background: #f4f8f4; border: 1px solid #c7ddd4; border-radius: 4px; color: #53645c; font-size: .82rem; line-height: 1.5; }
+        .progress-summary strong { color: #17221f; }
+        .progress-timeline { display: grid; gap: 0; }
+        .progress-step { position: relative; display: grid; grid-template-columns: 34px 1fr; gap: 12px; min-height: 76px; }
+        .progress-step:not(:last-child)::after { content: ''; position: absolute; left: 16px; top: 34px; bottom: 0; border-left: 2px solid #d9dfd9; }
+        .progress-step.complete:not(:last-child)::after { border-left-color: #72b8aa; }
+        .progress-dot { position: relative; z-index: 1; display: grid; place-items: center; width: 34px; height: 34px; border: 2px solid #cfd8d2; border-radius: 50%; background: #fffdf8; color: #78867f; font-size: .8rem; font-weight: 700; }
+        .progress-step.complete .progress-dot { border-color: #287d72; background: #287d72; color: #fff; }
+        .progress-step.current .progress-dot { border-color: #e0a52f; background: #fff8df; color: #8a6718; }
+        .progress-step h3 { margin: 3px 0 4px; color: #17221f; font-size: .9rem; }
+        .progress-step p { margin: 0; color: #718078; font-size: .76rem; line-height: 1.45; }
+        @media (max-width: 520px) {
+            .progress-form { display: block; }
+            .progress-form .btn { width: 100%; margin-top: 8px; }
+        }
+        .stats-strip { max-width: 1180px; margin: 30px auto 0; padding: 24px 18px 8px; display: grid; grid-template-columns: repeat(4, 1fr); border-top: 1px solid #cfd8d2; }
+        .stat-item { min-height: 82px; padding: 0 24px; display: flex; align-items: center; gap: 14px; border-right: 1px solid #d9dfd9; }
+        .stat-item:last-child { border-right: 0; }
+        .stat-icon { display: grid; place-items: center; width: 42px; height: 42px; flex: 0 0 42px; color: #287d72; font-size: 1.45rem; }
+        .stat-item strong { display: block; color: #17221f; font: 700 1.8rem/1 Georgia, 'Times New Roman', serif; }
+        .stat-item span { display: block; margin-top: 5px; color: #78867f; font-size: .68rem; font-weight: 700; letter-spacing: .9px; text-transform: uppercase; }
+        .stat-item.approved .stat-icon { color: #27945e; }
+        .stat-item.rejected .stat-icon { color: #c65a4c; }
+        .service-page .stats-strip { display: none; }
+        .how-it-works { max-width: 1180px; margin: 42px auto 0; padding: 4px 0 0; }
+        .how-heading { display: flex; align-items: end; justify-content: space-between; gap: 20px; margin-bottom: 22px; }
+        .how-heading h2 { margin: 5px 0 0; color: #17221f; font: 700 1.45rem Georgia, 'Times New Roman', serif; }
+        .how-heading p { max-width: 410px; color: #65736d; font-size: .78rem; line-height: 1.45; text-align: right; }
+        .steps { display: grid; grid-template-columns: repeat(5, 1fr); position: relative; }
+        .steps::before { content: ''; position: absolute; top: 22px; left: 9%; right: 9%; border-top: 1px dashed #9fc7bd; }
+        .step { position: relative; z-index: 1; padding: 0 18px; text-align: center; }
+        .step-number { display: grid; place-items: center; width: 44px; height: 44px; margin: 0 auto 13px; border: 4px solid #f4f1ea; border-radius: 50%; background: #287d72; color: #fff; font: 700 .86rem Georgia, serif; box-shadow: 0 0 0 1px #72b8aa; }
+        .step strong { display: block; color: #17221f; font-size: .9rem; }
+        .step span { display: block; margin-top: 7px; color: #65736d; font-size: .75rem; line-height: 1.45; }
+        .why-identigate { max-width: 1180px; margin: 48px auto 0; padding: 28px 0 4px; border-top: 1px solid #cfd8d2; }
+        .why-heading { display: flex; align-items: end; justify-content: space-between; gap: 20px; margin-bottom: 22px; }
+        .why-heading h2 { margin: 5px 0 0; color: #17221f; font: 700 1.45rem Georgia, 'Times New Roman', serif; }
+        .why-heading p { max-width: 410px; color: #65736d; font-size: .78rem; line-height: 1.45; text-align: right; }
+        .why-grid { display: grid; grid-template-columns: repeat(4, 1fr); gap: 14px; }
+        .why-card { min-height: 188px; padding: 20px 18px; background: #fffdf8; border: 1px solid #d9dfd9; border-top: 3px solid #287d72; border-radius: 5px; box-shadow: 0 8px 22px rgba(23,34,31,.06); }
+        .why-icon { display: grid; place-items: center; width: 40px; height: 40px; margin-bottom: 16px; border-radius: 50%; background: #e3f0eb; color: #287d72; font-size: 1.25rem; }
+        .why-card h3 { margin: 0; color: #17221f; font-size: .92rem; line-height: 1.3; }
+        .why-card p { margin: 9px 0 0; color: #65736d; font-size: .78rem; line-height: 1.55; }
+        .service-page .how-it-works { display: none; }
+        .service-page .why-identigate { display: none; }
+        .site-footer { margin-top: 42px; padding: 22px 24px; border-top: 1px solid #d9dfd9; background: #fffdf8; color: #78867f; text-align: center; font-size: .72rem; line-height: 1.6; }
+        .site-footer strong { color: #287d72; }
+        .service-page .service-banner, .service-page #services, .service-page .status-bar, .service-page .stats-strip, .service-page .activity-log { display: none; }
+        .home-page .panel { display: none; }
+        .service-page .container { padding-top: 28px; }
+        .service-page .tabs { display: none; }
+        .service-page .panel.active { width: 100%; max-width: 1180px; margin: 0 auto; }
+        .service-page .panel.active::before { content: 'IdentiGate service portal'; display: block; margin-bottom: 12px; color: #287d72; font-size: .7rem; font-weight: 750; letter-spacing: 1.4px; text-transform: uppercase; }
+        .service-back { display: none; }
+        .service-page .service-back { display: inline-flex; align-items: center; gap: 6px; margin-bottom: 18px; color: #287d72; font-size: .8rem; font-weight: 700; text-decoration: none; }
+        .service-page .service-back:hover { color: #162d82; text-decoration: underline; }
+        .register-layout { display: grid; grid-template-columns: minmax(245px, .32fr) minmax(0, 1fr); gap: 24px; align-items: start; }
+        .register-guidance { display: grid; gap: 18px; align-content: start; }
+        .guidance-box { padding: 18px; background: #fffdf8; border: 1px solid #d9dfd9; border-radius: 4px; box-shadow: 0 8px 22px rgba(23,34,31,.06); }
+        .guidance-box.prerequisites { border-top: 4px solid #e0a52f; }
+        .guidance-box h3 { margin: 0 0 12px; color: #17221f; font: 700 1.08rem Georgia, 'Times New Roman', serif; }
+        .guidance-box h3 span { margin-right: 6px; color: #287d72; }
+        .guidance-box ul { display: grid; gap: 12px; margin: 0; padding: 0; list-style: none; }
+        .guidance-box li { display: grid; grid-template-columns: 30px 1fr; gap: 9px; align-items: start; color: #53645c; font-size: .8rem; line-height: 1.45; }
+        .prerequisites ul { gap: 10px; }
+        .prerequisites li { grid-template-columns: 20px 1fr; }
+        .prerequisites li::before { content: '✓'; width: auto; height: auto; background: none; color: #287d72; font-weight: 800; }
+        .register-card { min-width: 0; }
+        .how-works-box { margin: 0; padding: 18px; background: #fffdf8; border: 1px solid #d9dfd9; border-top: 4px solid #e0a52f; border-radius: 4px; box-shadow: 0 8px 22px rgba(23,34,31,.06); }
+        .how-works-box h3 { margin: 0 0 12px; color: #17221f; font: 700 1.08rem Georgia, 'Times New Roman', serif; }
+        .how-works-box ol { display: grid; gap: 5px; margin: 0; padding-left: 20px; color: #53645c; font-size: .82rem; line-height: 1.45; }
+        .guidance-action { width: 100%; margin-top: 16px; padding: 10px 12px; border: 1px solid #287d72; border-radius: 4px; background: #e3f0eb; color: #287d72; font: 700 .78rem 'Trebuchet MS', 'Segoe UI', sans-serif; cursor: pointer; text-align: left; }
+        .guidance-action:hover { background: #d2e9e0; }
+        .identity-check { margin: 20px 0 16px; padding: 16px; background: #f4f8f4; border: 1px solid #c7ddd4; border-radius: 4px; }
+        .identity-check h3 { margin: 0 0 6px; color: #17221f; font: 700 1rem Georgia, 'Times New Roman', serif; }
+        .identity-check p { margin: 0 0 12px; color: #65736d; font-size: .78rem; line-height: 1.45; }
+        .identity-check .btn { margin-top: 4px; }
+        .identity-status { margin-top: 10px; color: #718078; font-size: .78rem; line-height: 1.4; }
+        .identity-status.success { color: #27945e; }
+        .identity-status.error { color: #c65a4c; }
+        .identity-proof-details { display: none; margin-top: 12px; padding-top: 8px; border-top: 1px solid #d9dfd9; }
+        .identity-proof-details.show { display: block; }
+        .identity-proof-details .result-row { font-size: .76rem; }
+        #applyBtn:disabled { background: #aab9b3; color: #eef3ef; box-shadow: none; cursor: not-allowed; opacity: 1; }
+        .register-card .form-group select { width: 100%; padding: 12px 16px; border: 1px solid #cfd8d2; border-radius: 4px; background: #f7f8f4; color: #17221f; font: inherit; outline: none; }
+        .register-card .form-group select:focus { border-color: #287d72; box-shadow: 0 0 0 3px rgba(40,125,114,.12); }
+        .consent-row { display: flex; gap: 10px; align-items: flex-start; margin: 4px 0 10px; color: #53645c; font-size: .79rem; line-height: 1.45; }
+        .consent-row input { width: 17px; height: 17px; flex: 0 0 auto; margin-top: 1px; accent-color: #287d72; }
+        .register-card .btn:disabled { background: #aab9b3; color: #eef3ef; box-shadow: none; cursor: not-allowed; opacity: 1; }
+        @media (max-width: 900px) {
+            .utility-inner { align-items: flex-start; flex-direction: column; padding-top: 7px; padding-bottom: 7px; gap: 5px; }
+            header { align-items: flex-start; flex-direction: column; gap: 12px; }
+            .brand-lockup { min-width: 0; }
+            .primary-nav { justify-content: flex-start; width: 100%; }
+            .service-grid { grid-template-columns: repeat(2, 1fr); }
+            .stats-strip { grid-template-columns: repeat(2, 1fr); gap: 18px 0; }
+            .stat-item:nth-child(2) { border-right: 0; }
+            .steps { grid-template-columns: repeat(2, 1fr); gap: 24px 0; }
+            .steps::before { display: none; }
+            .register-layout { grid-template-columns: 1fr; }
+        }
+        @media (max-width: 520px) {
+            .utility-inner nav { flex-wrap: wrap; gap: 8px; }
+            .utility-contact { width: 100%; margin-left: 0; }
+            header { padding-left: 16px; padding-right: 16px; }
+            .brand-lockup { align-items: flex-start; }
+            .hero-mark { flex-basis: 46px; width: 46px; height: 52px; }
+            .hero-mark::before { width: 46px; height: 52px; }
+            .hero-mark::after { font-size: 1.35rem; }
+            header h1 { font-size: 1.45rem; }
+            .primary-nav a { padding-left: 7px; padding-right: 7px; }
+            .service-banner { min-height: 235px; margin: 16px 0; padding: 28px 22px; }
+            .service-banner::after { right: 6%; top: 26px; width: 62px; height: 62px; font-size: 2.3rem; }
+            .service-banner p { max-width: 74%; }
+            .banner-image { right: 0; top: 0; width: 35%; height: 100%; }
+            .services-heading { display: block; }
+            .services-heading p { margin-top: 7px; text-align: left; }
+            .service-grid { grid-template-columns: 1fr; }
+            .stats-strip { grid-template-columns: 1fr 1fr; padding-left: 0; padding-right: 0; }
+            .stat-item { padding: 0 8px; }
+            .stat-item strong { font-size: 1.45rem; }
+            .how-it-works { margin-top: 32px; }
+            .how-heading { display: block; }
+            .how-heading p { margin-top: 7px; text-align: left; }
+            .steps { grid-template-columns: 1fr 1fr; }
+            .step { padding: 0 8px; }
+            .why-identigate { margin-top: 34px; padding-top: 22px; }
+            .why-heading { display: block; }
+            .why-heading p { margin-top: 7px; text-align: left; }
+            .why-grid { grid-template-columns: 1fr 1fr; }
+        }
+
+        @media (max-width: 520px) {
+            .why-grid { grid-template-columns: 1fr; }
+        }
+
+    </style>
+</head>
+<body>
+
+<div class="utility-bar">
+    <div class="utility-inner">
+        <span>Government Digital Identity Authority</span>
+        <nav aria-label="Utility navigation">
+            <a href="#main-dashboard">Skip to main content</a>
+            <button class="text-size-control" type="button" id="decreaseText" aria-label="Decrease text size">A-</button>
+            <button class="text-size-control" type="button" id="increaseText" aria-label="Increase text size">A+</button>
+            <button type="button" id="aboutButton">About</button>
+            <span class="utility-contact">Support: 1800-000-000</span>
+        </nav>
+    </div>
+</div>
+
+<header>
+    <div class="brand-lockup">
+        <div class="hero-mark" aria-hidden="true"></div>
+        <div class="brand-copy">
+            <h1>IdentiGate</h1>
+            <p>Verify your identity. Protect your privacy.</p>
+        </div>
+    </div>
+    <nav class="primary-nav" aria-label="Primary navigation">
+        <a class="active" href="#main-dashboard">Home</a>
+        <a href="#services" onclick="document.getElementById('services').scrollIntoView({ behavior: 'smooth' }); return false;">Our Services</a>
+        <button class="nav-login" type="button" onclick="openAuthPage()">Login</button>
+        <div class="account-menu-wrap">
+            <button class="nav-account" id="accountButton" type="button" hidden aria-label="Open account menu" aria-expanded="false">👤</button>
+            <div class="account-menu" id="accountMenu" hidden>
+                <span class="account-menu-user" id="accountUsername"></span>
+                <span class="account-menu-role" id="accountRole"></span>
+                <button class="account-logout" id="logoutButton" type="button">Log out</button>
+            </div>
+        </div>
+    </nav>
+</header>
+
+<main class="auth-screen" id="authScreen">
+    <section class="auth-card" id="authCard"></section>
+</main>
+
+<section class="service-banner" aria-labelledby="bannerTitle">
+    <div class="banner-copy">
+        <div class="banner-kicker">A NEW STANDARD FOR SECURE VERIFICATION</div>
+        <h2 id="bannerTitle">Your identity, protected at every step.</h2>
+        <p>A single identity registration enables secure passport applications, with your personal information protected throughout.</p>
+    </div>
+    <div class="banner-image" aria-label="Passport authentication illustration">
+        <img src="images/banner_img.jfif" alt="Passport authentication and identity verification" onerror="this.style.display='none'" />
+    </div>
+</section>
+
+<div class="about-dialog" id="aboutDialog" role="dialog" aria-modal="true" aria-labelledby="aboutTitle">
+    <section class="about-card">
+        <h2 id="aboutTitle">About this platform</h2>
+        <p><strong>Cross-Blockchain Passport Authentication</strong> is a secure identity verification platform that links Aadhaar identity to passport authentication without exposing personal data during the process.</p>
+        <h3>What this platform does</h3>
+        <ul>
+            <li>Registers identity details on the Aadhaar blockchain.</li>
+            <li>Submits passport applications using a registered Aadhaar ID.</li>
+            <li>Cross-checks identity across two independent blockchain networks.</li>
+            <li>Records registrations, applications, and verification results immutably.</li>
+        </ul>
+        <h3>How privacy is protected</h3>
+        <p>Name, date of birth, and Aadhaar number are converted into a secure cryptographic hash before blockchain storage. Digital signatures verify the proof, so systems exchange evidence of identity rather than raw identity data.</p>
+        <h3>Why two blockchains</h3>
+        <p>Aadhaar and Passport records remain on separate networks. No single system holds the complete identity picture; verification happens through secure cross-chain checks.</p>
+        <h3>Available services</h3>
+        <table>
+            <thead><tr><th>Tab</th><th>Purpose</th></tr></thead>
+            <tbody>
+                <tr><td>Register Citizen</td><td>Add an identity to the Aadhaar blockchain.</td></tr>
+                <tr><td>Apply for Passport</td><td>Submit an application using an Aadhaar ID.</td></tr>
+                <tr><td>Citizens</td><td>View registered identity records.</td></tr>
+                <tr><td>Applications</td><td>Track passport application status.</td></tr>
+            </tbody>
+        </table>
+        <button class="about-close" type="button" id="closeAbout">Close</button>
+    </section>
+</div>
+
+<div class="activity-log" id="activityLog"></div>
+
+<div class="container" id="main-dashboard">
+    <a class="service-back" href="index.html#services" onclick="goToServices(event)">← Back to Our Services</a>
+    <section class="services-panel" id="services">
+        <div class="services-heading">
+            <div><div class="section-kicker">Our services</div><h2>What you can do here</h2></div>
+            <p>Choose a service to begin a secure identity action or review records already written to the blockchain.</p>
+        </div>
+        <div class="service-grid">
+            <button class="service-card" data-service="register" onclick="openServicePage('register')"><span class="service-icon">+</span><strong>Register Citizen</strong><span>Create a secure identity profile with your personal details.</span><small>Start registration →</small></button>
+            <button class="service-card" data-service="apply" onclick="openServicePage('apply')"><span class="service-icon">↗</span><strong>Apply for Passport</strong><span>Send a passport application using your registered identity.</span><small>Start application →</small></button>
+            <button class="service-card" data-service="citizens" onclick="openServicePage('citizens')"><span class="service-icon">◎</span><strong>View Citizens</strong><span>See the identities that have already been registered.</span><small>View records →</small></button>
+            <button class="service-card" data-service="applications" onclick="openServicePage('applications')"><span class="service-icon">▤</span><strong>Track Applications</strong><span>Review passport applications and see their current status.</span><small>View applications →</small></button>
+            <button class="service-card" data-service="progress" onclick="openServicePage('progress')"><span class="service-icon">↗</span><strong>Track Your Progress</strong><span>See where your passport application currently stands.</span><small>Track application →</small></button>
+        </div>
+    </section>
+    <section class="how-it-works" aria-labelledby="howTitle">
+        <div class="how-heading">
+            <div><div class="section-kicker">Simple and secure</div><h2 id="howTitle">How it works</h2></div>
+            <p>Complete your passport journey in five clear steps, with guidance at every stage.</p>
+        </div>
+        <div class="steps">
+            <div class="step">
+                <div class="step-number">01</div>
+                <strong>Register your identity</strong>
+                <span>Provide your details once to create your identity profile.</span>
+            </div>
+            <div class="step">
+                <div class="step-number">02</div>
+                <strong>Apply for your passport</strong>
+                <span>Use your registered identity to submit an application.</span>
+            </div>
+            <div class="step">
+                <div class="step-number">03</div>
+                <strong>Complete your identity check</strong>
+                <span>Your details are securely checked to confirm your identity.</span>
+            </div>
+            <div class="step">
+                <div class="step-number">04</div>
+                <strong>Receive your result</strong>
+                <span>Find out whether your passport application is approved or rejected.</span>
+            </div>
+            <div class="step">
+                <div class="step-number">05</div>
+                <strong>Track your progress</strong>
+                <span>Check your application status and latest update anytime.</span>
+            </div>
+        </div>
+    </section>
+    <section class="why-identigate" aria-labelledby="whyTitle">
+        <div class="why-heading">
+            <div>
+                <div class="section-kicker">WHY IDENTIGATE</div>
+                <h2 id="whyTitle">Built on trust. Designed for privacy.</h2>
+            </div>
+            <p>Your identity is protected by strong cryptography, verifiable records, and transparent activity.</p>
+        </div>
+        <div class="why-grid">
+            <article class="why-card">
+                <div class="why-icon" aria-hidden="true">&#128274;</div>
+                <h3>Your data, never exposed</h3>
+                <p>Your personal details are never stored or shared in raw form. Every identity is protected through cryptographic hashing before it is recorded.</p>
+            </article>
+            <article class="why-card">
+                <div class="why-icon" aria-hidden="true">&#9939;</div>
+                <h3>Tamper-proof by design</h3>
+                <p>Once your identity is registered, it cannot be altered, deleted, or forged, not by us, not by anyone.</p>
+            </article>
+            <article class="why-card">
+                <div class="why-icon" aria-hidden="true">&#9989;</div>
+                <h3>Verified, not guessed</h3>
+                <p>Every application is authenticated through a secure digital signature, so approvals are based on proof, not paperwork alone.</p>
+            </article>
+            <article class="why-card">
+                <div class="why-icon" aria-hidden="true">&#128065;</div>
+                <h3>Nothing hidden from you</h3>
+                <p>Every action, including registration, application, and verification, is transparent and traceable.</p>
+            </article>
+        </div>
+    </section>
+    <section class="stats-strip" aria-label="Platform statistics">
+        <div class="stat-item">
+            <div class="stat-icon">◎</div>
+            <div><strong id="totalRegistered">—</strong><span>Registered citizens</span></div>
+        </div>
+        <div class="stat-item">
+            <div class="stat-icon">▤</div>
+            <div><strong id="totalApplications">—</strong><span>Passport applications</span></div>
+        </div>
+        <div class="stat-item approved">
+            <div class="stat-icon">✓</div>
+            <div><strong id="totalApproved">—</strong><span>Approved applications</span></div>
+        </div>
+        <div class="stat-item rejected">
+            <div class="stat-icon">×</div>
+            <div><strong id="totalRejected">—</strong><span>Rejected applications</span></div>
+        </div>
+    </section>
+    </div>
+    <!-- TAB 1: Register Citizen -->
+    <div class="panel active" id="tab-register">
+        <div class="register-layout">
+            <aside class="register-guidance" aria-label="Registration guidance">
+                <section class="guidance-box prerequisites">
+                    <h3><span aria-hidden="true">!</span>Before You Begin</h3>
+                    <ul>
+                        <li>You must have a valid 12-digit Aadhaar ID</li>
+                        <li>Your name and date of birth must match your Aadhaar records exactly</li>
+                        <li>This process cannot be undone once submitted, since blockchain records are immutable</li>
+                    </ul>
+                </section>
+                <section class="how-works-box" aria-labelledby="howWorksTitle">
+                    <h3 id="howWorksTitle">How this works</h3>
+                    <ol>
+                        <li>Enter your name, DOB and Aadhaar ID</li>
+                        <li>Review your details and give consent</li>
+                        <li>Click Submit Registration</li>
+                        <li>Wait a few seconds for confirmation</li>
+                    </ol>
+                </section>
+            </aside>
+            <div class="register-main">
+                <div class="card register-card">
+                <h2>➕ Register New Citizen</h2>
+            <div class="form-group">
+                <label>Full Name</label>
+                <input type="text" id="regName" placeholder="e.g. Rajesh Kumar" />
+            </div>
+            <div class="form-group">
+                <label>Date of Birth (DD-MM-YYYY)</label>
+                <input type="text" id="regDob" placeholder="e.g. 15-06-1985" />
+            </div>
+            <div class="form-group">
+                <label>Aadhaar ID</label>
+                <input type="text" id="regAadhaar" placeholder="e.g. 1111-2222-3333" oninput="checkAadhaarFormat(this, 'regHint')" />
+                <div class="form-hint" id="regHint">Format: 4 digits-4 digits-4 digits</div>
+            </div>
+            <div class="form-group">
+                <label for="regGender">Gender</label>
+                <select id="regGender">
+                    <option value="">Select gender</option>
+                    <option value="Male">Male</option>
+                    <option value="Female">Female</option>
+                    <option value="Other">Other</option>
+                </select>
+            </div>
+            <div class="form-group">
+                <label for="regMobile">Mobile Number</label>
+                <input type="text" id="regMobile" placeholder="e.g. 9876543210" />
+                <div class="form-hint">Format: 10 digits</div>
+            </div>
+            <label class="consent-row" for="regConsent">
+                <input type="checkbox" id="regConsent" />
+                <span>I consent to my identity data being hashed and stored on the blockchain</span>
+            </label>
+            <button type="button" class="btn" id="regBtn" onclick="registerCitizen()" disabled>Submit Registration</button>
+            <div class="result" id="regResult">
+                <div class="result-title" id="regTitle"></div>
+                <div id="regDetails"></div>
+            </div>
+            </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- TAB 2: Apply for Passport -->
+    <div class="panel" id="tab-apply">
+        <div class="register-layout">
+            <aside class="register-guidance" aria-label="Passport application guidance">
+                <section class="guidance-box prerequisites">
+                    <h3><span aria-hidden="true">!</span>Before You Begin</h3>
+                    <ul>
+                        <li>You must have a completed identity registration on this portal</li>
+                        <li>Use the same full name shown on your identity registration</li>
+                        <li>Keep your registered Aadhaar ID ready</li>
+                        <li>Check that all details are correct before submitting</li>
+                    </ul>
+                </section>
+                <section class="how-works-box" aria-labelledby="passportHowWorksTitle">
+                    <h3 id="passportHowWorksTitle">How this works</h3>
+                    <ol>
+                        <li>Enter your registered full name</li>
+                        <li>Enter your registered Aadhaar ID</li>
+                        <li>Verify your identity before applying</li>
+                        <li>Submit your application and wait for the result</li>
+                    </ol>
+                </section>
+            </aside>
+            <div class="register-main">
+                <div class="card register-card">
+            <h2>📄 Passport Application</h2>
+            <div class="form-group">
+                <label>Full Name</label>
+                <input type="text" id="appName" placeholder="e.g. Rajesh Kumar" />
+            </div>
+            <div class="form-group">
+                <label>Aadhaar ID</label>
+                <input type="text" id="appAadhaar" placeholder="e.g. 1111-2222-3333" oninput="checkAadhaarFormat(this, 'appHint')" />
+                <div class="form-hint" id="appHint">Format: 4 digits-4 digits-4 digits</div>
+            </div>
+            <section class="identity-check" aria-labelledby="identityCheckTitle">
+                <h3 id="identityCheckTitle">Verify your identity</h3>
+                <p>Confirm your registered identity here before submitting your passport application.</p>
+                <button type="button" class="btn" id="verifyApplicationBtn" onclick="verifyApplicationIdentity()">Verify identity</button>
+                <div class="identity-status" id="applicationIdentityStatus">Verification is required before you can submit.</div>
+                <div class="identity-proof-details" id="applicationIdentityDetails"></div>
+            </section>
+            <button type="button" class="btn" id="applyBtn" onclick="applyPassport()" disabled>Submit Application</button>
+            <div class="result" id="applyResult">
+                <div class="result-title" id="applyTitle"></div>
+                <div id="applyDetails"></div>
+            </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- TAB 3: Citizens -->
+    <div class="panel" id="tab-citizens">
+        <div class="card">
+            <h2>👥 Registered Citizens (Aadhaar Blockchain)</h2>
+            <div id="citizensList">
+                <div class="empty-state">
+                    <div class="icon">📂</div>
+                    <div class="msg">Click the Citizens tab to load records from the chain.</div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- TAB 4: Applications -->
+    <div class="panel" id="tab-applications">
+        <div class="card">
+            <h2>⛓️ Passport Applications (Passport Blockchain)</h2>
+            <div id="applicationsList">
+                <div class="empty-state">
+                    <div class="icon">⛓️</div>
+                    <div class="msg">Click the Applications tab to load records from the chain.</div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- TAB 5: Applicant progress -->
+    <div class="panel" id="tab-progress">
+        <div class="card">
+            <h2>📍 Track Your Passport Progress</h2>
+            <p class="form-hint" style="margin: -14px 0 22px;">Enter the Aadhaar ID used for your passport application to see its latest stage.</p>
+            <form class="progress-form" id="progressForm">
+                <div class="form-group">
+                    <label for="progressAadhaar">Aadhaar ID</label>
+                    <input type="text" id="progressAadhaar" placeholder="e.g. 1111-2222-3333" autocomplete="off" />
+                    <div class="form-hint" id="progressHint">Format: 4 digits-4 digits-4 digits</div>
+                </div>
+                <button type="submit" class="btn">Check progress</button>
+            </form>
+            <div id="progressResult">
+                <div class="empty-state">
+                    <div class="icon">📍</div>
+                    <div class="msg">Enter your Aadhaar ID to check your passport application.</div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+</div>
+
+<footer class="site-footer">
+    <strong>IdentiGate</strong> — Secure identity verification for passport services.<br />
+    © 2026 AuthentiPass · Government Digital Identity Authority · Privacy Policy · Terms of Service
+</footer>
+
+<script>
+    const API = `${window.location.protocol}//${window.location.hostname || "127.0.0.1"}:5000`;
+    const textSizeKey = "passport-ui-text-size";
+    let textSize = Number(localStorage.getItem(textSizeKey)) || 100;
+    let applicationIdentityVerified = false;
+    let rejectedApplicationAttempt = null;
+    let currentUser = null;
+
+    function apiFetch(path, options = {}) {
+        return fetch(`${API}${path}`, { ...options, credentials: "include" });
+    }
+
+    function applyTextSize() {
+        textSize = Math.min(115, Math.max(90, textSize));
+        document.documentElement.style.fontSize = `${textSize}%`;
+        localStorage.setItem(textSizeKey, String(textSize));
+    }
+
+    function openAuthPage() {
+        window.location.hash = "auth";
+    }
+
+    function updateAccountButton() {
+        const role = currentUser?.role;
+        const loginButton = document.querySelector(".nav-login");
+        const accountButton = document.getElementById("accountButton");
+        const accountUsername = document.getElementById("accountUsername");
+        const accountRole = document.getElementById("accountRole");
+        if (!loginButton || !accountButton || !accountUsername || !accountRole) return;
+        loginButton.hidden = Boolean(role);
+        accountButton.hidden = !role;
+        if (!role) {
+            document.getElementById("accountMenu").hidden = true;
+            accountButton.setAttribute("aria-expanded", "false");
+        }
+        if (role) {
+            const roleLabel = role === "developer" ? "Developer" : "Applicant";
+            accountButton.title = `${roleLabel} account`;
+            accountUsername.textContent = currentUser.name || currentUser.username || "Signed-in account";
+            accountRole.textContent = `${roleLabel} account`;
+        }
+    }
+
+    function applyRoleAccess(role) {
+        document.body.classList.remove("role-guest", "role-applicant", "role-developer");
+        document.body.classList.add(role ? `role-${role}` : "role-guest");
+        updateAccountButton();
+    }
+
+    function renderAuthStep(step) {
+        const card = document.getElementById("authCard");
+        if (!card) return;
+        const back = step === "role" ? "" : '<a class="auth-back" href="#auth" onclick="renderAuthStep(\'role\'); return false;">← Choose another role</a>';
+        const screens = {
+            role: `${back}<h2>Who are you?</h2><p>Select the option that best describes how you will use IdentiGate.</p><div class="auth-role-grid"><button class="auth-role" type="button" onclick="openRoleAuth('applicant')"><strong>Applicant</strong><span>Apply for a passport and follow your application status.</span></button><button class="auth-role" type="button" onclick="openRoleAuth('developer')"><strong>Developer</strong><span>Review registered citizens and passport applications.</span></button></div>`
+        };
+        card.innerHTML = screens[step] || screens.role;
+    }
+
+    function openRoleAuth(role, mode) {
+        const isDeveloper = role === "developer";
+        const authMode = isDeveloper ? "login" : (mode || "signup");
+        const heading = isDeveloper ? "Developer sign in" : (authMode === "signup" ? "Create applicant account" : "Applicant sign in");
+        const description = isDeveloper
+            ? "Sign in with an authorized team USN and provisioned password."
+            : (authMode === "signup" ? "Create an account with your name, email, and password." : "Enter your email and password to continue.");
+        const back = '<a class="auth-back" href="#auth" onclick="renderAuthStep(\'role\'); return false;">← Choose another role</a>';
+        const identifier = isDeveloper
+            ? '<label>USN<input name="usn" type="text" required autocomplete="username" placeholder="Enter your authorized USN" /></label>'
+            : '<label>Email address<input name="email" type="email" required autocomplete="email" placeholder="name@example.com" /></label>';
+        const nameField = !isDeveloper && authMode === "signup"
+            ? '<label>Full name<input name="name" type="text" required autocomplete="name" placeholder="Enter your full name" /></label>'
+            : "";
+        const submitPath = isDeveloper ? "developer/login" : `applicant/${authMode}`;
+        const toggle = !isDeveloper
+            ? `<div class="auth-note">${authMode === "signup" ? 'Already have an account? <button class="auth-link" type="button" onclick="openRoleAuth(\'applicant\', \'login\')">Sign in</button>' : 'New to IdentiGate? <button class="auth-link" type="button" onclick="openRoleAuth(\'applicant\', \'signup\')">Create an account</button>'}</div>`
+            : '<div class="auth-note">Developer accounts are created by the team administrator for authorized USNs.</div>';
+        document.getElementById("authCard").innerHTML = `${back}<h2>${heading}</h2><p>${description}</p><form class="auth-form" onsubmit="submitAuth(event, '${submitPath}')">${nameField}${identifier}<label>Password<input name="password" type="password" required minlength="8" autocomplete="${authMode === "signup" ? "new-password" : "current-password"}" placeholder="At least 8 characters" /></label><div class="auth-error" id="authError" role="alert"></div><button class="auth-submit" type="submit">${authMode === "signup" ? "Create account" : "Sign in"}</button></form>${toggle}`;
+    }
+
+    async function submitAuth(event, authPath) {
+        event.preventDefault();
+        const form = event.currentTarget;
+        const payload = Object.fromEntries(new FormData(form).entries());
+        const errorBox = document.getElementById("authError");
+        const button = form.querySelector("button[type='submit']");
+        button.disabled = true;
+        errorBox.textContent = "";
+        try {
+            const response = await apiFetch(`/auth/${authPath}`, {
+                method: "POST",
+                headers: { "Content-Type": "application/json" },
+                body: JSON.stringify(payload)
+            });
+            const data = await response.json();
+            if (!response.ok) throw new Error(data.error || "Sign in failed");
+            currentUser = data.user;
+            applyRoleAccess(currentUser.role);
+            document.body.classList.remove("auth-page", "service-page");
+            document.body.classList.add("home-page");
+            window.location.hash = "main-dashboard";
+        } catch (error) {
+            errorBox.textContent = error.message;
+        } finally {
+            button.disabled = false;
+        }
+    }
+
+    async function logout() {
+        try {
+            await apiFetch("/auth/logout", { method: "POST" });
+        } finally {
+            currentUser = null;
+            document.getElementById("accountMenu").hidden = true;
+            document.getElementById("accountButton").setAttribute("aria-expanded", "false");
+            applyRoleAccess(null);
+            window.location.hash = "main-dashboard";
+        }
+    }
+
+    async function refreshAuthSession() {
+        try {
+            const response = await apiFetch("/auth/session", { cache: "no-store" });
+            const data = await response.json();
+            currentUser = data.authenticated ? data.user : null;
+        } catch {
+            currentUser = null;
+        }
+        applyRoleAccess(currentUser?.role || null);
+        return currentUser;
+    }
+
+    function userCanOpenService(tabId) {
+        if (!currentUser) return false;
+        const applicantServices = ["register", "apply", "progress"];
+        const developerServices = ["citizens", "applications"];
+        return currentUser.role === "applicant"
+            ? applicantServices.includes(tabId)
+            : currentUser.role === "developer" && developerServices.includes(tabId);
+    }
+
+    function setAboutOpen(isOpen) {
+        const dialog = document.getElementById("aboutDialog");
+        dialog.classList.toggle("open", isOpen);
+        if (isOpen) document.getElementById("closeAbout").focus();
+    }
+
+    document.getElementById("decreaseText").addEventListener("click", () => {
+        textSize -= 5;
+        applyTextSize();
+    });
+    document.getElementById("increaseText").addEventListener("click", () => {
+        textSize += 5;
+        applyTextSize();
+    });
+    document.getElementById("aboutButton").addEventListener("click", () => setAboutOpen(true));
+    document.getElementById("closeAbout").addEventListener("click", () => setAboutOpen(false));
+    document.getElementById("aboutDialog").addEventListener("click", (event) => {
+        if (event.target.id === "aboutDialog") setAboutOpen(false);
+    });
+    document.getElementById("accountButton").addEventListener("click", () => {
+        const menu = document.getElementById("accountMenu");
+        const isOpen = !menu.hidden;
+        menu.hidden = isOpen;
+        document.getElementById("accountButton").setAttribute("aria-expanded", String(!isOpen));
+    });
+    document.getElementById("logoutButton").addEventListener("click", logout);
+    document.addEventListener("click", (event) => {
+        const accountMenu = document.getElementById("accountMenu");
+        const accountWrap = document.querySelector(".account-menu-wrap");
+        if (!accountMenu.hidden && !accountWrap.contains(event.target)) {
+            accountMenu.hidden = true;
+            document.getElementById("accountButton").setAttribute("aria-expanded", "false");
+        }
+    });
+    document.addEventListener("keydown", (event) => {
+        if (event.key === "Escape") setAboutOpen(false);
+    });
+    applyTextSize();
+    applyRoleAccess(null);
+    document.getElementById("regConsent").addEventListener("change", (event) => {
+        document.getElementById("regBtn").disabled = !event.target.checked;
+    });
+    document.getElementById("progressForm").addEventListener("submit", fetchApplicantProgress);
+    document.getElementById("progressAadhaar").addEventListener("input", (event) => {
+        checkAadhaarFormat(event.target, "progressHint");
+    });
+    ["appName", "appAadhaar"].forEach((id) => {
+        document.getElementById(id).addEventListener("input", () => {
+            applicationIdentityVerified = false;
+            rejectedApplicationAttempt = null;
+            document.getElementById("applyBtn").disabled = true;
+            const status = document.getElementById("applicationIdentityStatus");
+            status.className = "identity-status";
+            status.textContent = "Verification is required before you can submit.";
+            document.getElementById("applicationIdentityDetails").className = "identity-proof-details";
+            document.getElementById("applicationIdentityDetails").innerHTML = "";
+        });
+    });
+
+    function switchTab(tabId, el) {
+        document.querySelectorAll('.panel').forEach(p => p.classList.remove('active'));
+        document.querySelectorAll('.tab').forEach(t => t.classList.remove('active'));
+        document.getElementById('tab-' + tabId).classList.add('active');
+        if (el) el.classList.add('active');
+
+        if (tabId === 'citizens') fetchCitizens();
+        if (tabId === 'applications') fetchApplications();
+        if (tabId === 'progress') {
+            document.getElementById("progressAadhaar").focus();
+        }
+    }
+
+    function openServicePage(tabId) {
+        if (!userCanOpenService(tabId)) {
+            alert("Login is required to access this service.");
+            return;
+        }
+        window.location.hash = `tab-${tabId}`;
+    }
+
+    function goToServices(event) {
+        event.preventDefault();
+        document.body.classList.remove("service-page", "auth-page");
+        document.body.classList.add("home-page");
+        applyRoleAccess(currentUser?.role || null);
+        window.location.hash = "main-dashboard";
+        document.getElementById("main-dashboard").scrollIntoView({ behavior: "smooth" });
+    }
+
+    async function activateTabFromUrl() {
+        const tabId = window.location.hash.replace('#tab-', '');
+        const tabIndex = { register: 0, apply: 1, citizens: 2, applications: 3, progress: 4 }[tabId];
+        if (window.location.hash === '#auth') {
+            await refreshAuthSession();
+            document.body.classList.add('auth-page');
+            renderAuthStep('role');
+            return;
+        }
+
+        await refreshAuthSession();
+        if (tabId && Object.prototype.hasOwnProperty.call({ register: 1, apply: 1, citizens: 1, applications: 1, progress: 1 }, tabId)) {
+            if (!userCanOpenService(tabId)) {
+                window.location.hash = "main-dashboard";
+                return;
+            }
+            document.body.classList.remove('home-page', 'auth-page');
+            document.body.classList.add('service-page');
+            const tab = document.querySelectorAll('.tab')[tabIndex];
+            switchTab(tabId, tab || null);
+        } else {
+            document.body.classList.remove('service-page', 'auth-page');
+            document.body.classList.add('home-page');
+            applyRoleAccess(currentUser?.role || null);
+        }
+    }
+
+    window.addEventListener("hashchange", activateTabFromUrl);
+
+    function checkAadhaarFormat(input, hintId) {
+        const val = input.value.trim();
+        const hint = document.getElementById(hintId);
+        const regex = /^\d{4}-\d{4}-\d{4}$/;
+        if (regex.test(val)) {
+            input.className = "valid";
+            hint.className = "form-hint ok";
+            hint.textContent = "✔ Valid format";
+        } else if (val.length > 0) {
+            input.className = "invalid";
+            hint.className = "form-hint bad";
+            hint.textContent = "✘ Expected format: 1111-2222-3333";
+        } else {
+            input.className = "";
+            hint.className = "form-hint";
+            hint.textContent = "Format: 4 digits-4 digits-4 digits";
+        }
+    }
+
+    function escapeHtml(value) {
+        return String(value ?? "").replace(/[&<>"']/g, character => ({
+            "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;"
+        }[character]));
+    }
+
+    function renderProgress(application, registration) {
+        const status = String(application ? application.status || "" : "").toUpperCase();
+        const isApproved = status === "APPROVED";
+        const isRejected = status === "REJECTED";
+        const decisionText = isApproved
+            ? "Your passport application was approved."
+            : isRejected
+                ? "Your application was reviewed and requires attention."
+                : "Your identity and application are being reviewed.";
+        const stages = [
+            { title: "Registration started", description: registration ? "Your Aadhaar identity is registered on the Aadhaar blockchain." : "Your Aadhaar identity has not been registered yet.", state: registration ? "complete" : "current" },
+            { title: "Passport application submitted", description: application ? "Your passport request is recorded on the passport blockchain." : "Submit a passport application after registration is complete.", state: application ? "complete" : "" },
+            { title: "Identity verification", description: application ? (isApproved || isRejected ? "Your Aadhaar identity has been checked." : "Your Aadhaar identity check is in progress.") : "This stage begins after you submit your application.", state: application && (isApproved || isRejected) ? "complete" : application ? "current" : "" },
+            { title: "Passport decision", description: application ? decisionText : "Your application decision will appear here.", state: application && (isApproved || isRejected) ? "complete" : "" }
+        ];
+        const currentStage = !registration ? "Registration required" : !application ? "Ready to apply" : isApproved ? "Application complete" : isRejected ? "Review required" : "Identity verification in progress";
+        const steps = stages.map((stage, index) => `
+            <div class="progress-step ${stage.state}">
+                <div class="progress-dot">${stage.state === "complete" ? "✓" : index + 1}</div>
+                <div><h3>${stage.title}</h3><p>${stage.description}</p></div>
+            </div>`).join("");
+        document.getElementById("progressResult").innerHTML = `
+            <div class="progress-summary">
+                <strong>Current stage: ${currentStage}</strong><br>
+                ${application ? `Application #${escapeHtml(application.app_id)} · Last updated ${escapeHtml(application.timestamp)}` : "No passport application submitted yet"} · Aadhaar ID ${escapeHtml(registration ? registration.aadhaar_id : application ? application.aadhaar_id : "")}
+            </div>
+            <div class="progress-timeline" aria-label="Passport application progress">${steps}</div>`;
+    }
+
+    async function fetchApplicantProgress(event) {
+        event.preventDefault();
+        const aadhaar = document.getElementById("progressAadhaar").value.trim();
+        const hint = document.getElementById("progressHint");
+        const result = document.getElementById("progressResult");
+        if (!/^\d{4}-\d{4}-\d{4}$/.test(aadhaar)) {
+            hint.className = "form-hint bad";
+            hint.textContent = "Enter the Aadhaar ID in 1111-2222-3333 format.";
+            result.innerHTML = `<div class="empty-state"><div class="icon">!</div><div class="msg">A valid Aadhaar ID is required.</div></div>`;
+            return;
+        }
+        hint.className = "form-hint ok";
+        hint.textContent = "Looking up your application...";
+        result.innerHTML = `<div class="loading">Loading your passport progress...</div>`;
+        try {
+            const response = await apiFetch(`/passport/progress/${encodeURIComponent(aadhaar)}`, { cache: "no-store" });
+            const data = await response.json();
+            if (!response.ok) throw new Error(data.error || "Could not load passport progress.");
+            const registration = data.registration_found ? data.registration : null;
+            const matches = (data.applications || [])
+                .sort((left, right) => Number(right.app_id || 0) - Number(left.app_id || 0));
+            if (!registration && matches.length === 0) {
+                result.innerHTML = `<div class="empty-state"><div class="icon">📂</div><div class="msg">No passport application was found for this Aadhaar ID.</div></div>`;
+                hint.className = "form-hint bad";
+                hint.textContent = "Check the Aadhaar ID and try again.";
+                return;
+            }
+            renderProgress(matches[0] || null, registration);
+            hint.className = "form-hint ok";
+            hint.textContent = matches.length > 0 ? "Application found." : "Identity registration found. Ready to apply.";
+        } catch (error) {
+            result.innerHTML = `<div class="empty-state"><div class="icon">⚠️</div><div class="msg">${escapeHtml(error.message || "Could not load your passport progress.")}</div></div>`;
+            hint.className = "form-hint bad";
+            hint.textContent = "Progress could not be loaded.";
+        }
+    }
+
+    function pushActivityToast(msg, txHash) {
+        const log = document.getElementById("activityLog");
+        const toast = document.createElement("div");
+        toast.className = "activity-toast";
+        toast.innerHTML = `<span>⚡ ${msg}</span> <span class="tx">${txHash ? txHash.substring(0, 14) + '...' : ''}</span>`;
+        log.prepend(toast);
+        setTimeout(() => { toast.style.opacity = '0'; setTimeout(() => toast.remove(), 300); }, 5000);
+    }
+
+    async function loadStatus() {
+        const controller = new AbortController();
+        const timeout = setTimeout(() => controller.abort(), 3000);
+        try {
+            const statsRes = await apiFetch("/stats", { cache: "no-store", signal: controller.signal });
+            if (!statsRes.ok) throw new Error(`Stats request failed with status ${statsRes.status}`);
+            const data = await statsRes.json();
+            document.getElementById("totalRegistered").textContent = data.aadhaar_registered ?? "—";
+            document.getElementById("totalApplications").textContent = data.passport_applications ?? "—";
+            document.getElementById("totalApproved").textContent = data.approved ?? "—";
+            document.getElementById("totalRejected").textContent = data.rejected ?? "—";
+        } catch (error) {
+            document.getElementById("totalRegistered").textContent = "—";
+            document.getElementById("totalApplications").textContent = "—";
+            document.getElementById("totalApproved").textContent = "—";
+            document.getElementById("totalRejected").textContent = "—";
+        } finally {
+            clearTimeout(timeout);
+        }
+    }
+
+    async function registerCitizen() {
+        const name = document.getElementById("regName").value.trim();
+        const dob = document.getElementById("regDob").value.trim();
+        const aadhaar = document.getElementById("regAadhaar").value.trim();
+        const btn = document.getElementById("regBtn");
+        const resBox = document.getElementById("regResult");
+
+        if (!name || !dob || !aadhaar) {
+            alert("Please fill in all fields.");
+            return;
+        }
+        btn.disabled = true;
+        btn.textContent = "Processing Transaction...";
+
+        try {
+            const res = await apiFetch(`/aadhaar/register`, {
+                method: "POST",
+                headers: { "Content-Type": "application/json" },
+                body: JSON.stringify({ name, dob, aadhaar_id: aadhaar })
+            });
+            const data = await res.json();
+            resBox.className = "result show " + (res.ok ? "success" : "error");
+            
+            if (res.ok) {
+                document.getElementById("regTitle").textContent = "✅ Citizen Successfully Registered";
+                document.getElementById("regDetails").innerHTML = `
+                    <div class="result-row"><span class="key">Citizen Name</span><span class="val">${name}</span></div>
+                    <div class="result-row"><span class="key">Aadhaar ID</span><span class="val">${aadhaar}</span></div>
+                    <div class="tx-box"><div class="tx-label">Transaction Hash</div>${data.transaction_hash || '0x...'}</div>
+                `;
+                pushActivityToast(`Registered citizen ${name}`, data.transaction_hash);
+            } else {
+                document.getElementById("regTitle").textContent = "❌ Registration Failed";
+                document.getElementById("regDetails").innerHTML = `<div style="color:#f87171">${data.error || 'Unknown error'}</div>`;
+            }
+        } catch(err) {
+            resBox.className = "result show error";
+            document.getElementById("regTitle").textContent = "❌ Network Error";
+            document.getElementById("regDetails").innerHTML = `<div style="color:#f87171">Could not connect to middleware server.</div>`;
+        } finally {
+            btn.disabled = !document.getElementById("regConsent").checked;
+            btn.textContent = "Submit Registration";
+        }
+    }
+
+    async function applyPassport() {
+        const name = document.getElementById("appName").value.trim();
+        const aadhaar = document.getElementById("appAadhaar").value.trim();
+        const btn = document.getElementById("applyBtn");
+        const resBox = document.getElementById("applyResult");
+
+        if (!name || !aadhaar) {
+            alert("Please fill in all fields.");
+            return;
+        }
+        if (!applicationIdentityVerified) {
+            alert("Please verify your identity before submitting the application.");
+            return;
+        }
+
+        btn.disabled = true;
+        btn.textContent = "Submitting Application...";
+
+        try {
+            const res = await apiFetch(`/passport/apply`, {
+                method: "POST",
+                headers: { "Content-Type": "application/json" },
+                body: JSON.stringify({ name, aadhaar_id: aadhaar })
+            });
+            const data = await res.json();
+            resBox.className = "result show " + (res.ok ? "success" : "error");
+
+            if (res.ok) {
+                document.getElementById("applyTitle").textContent = "✅ Passport Application Logged";
+                document.getElementById("applyDetails").innerHTML = `
+                    <div class="result-row"><span class="key">Applicant</span><span class="val">${name}</span></div>
+                    <div class="result-row"><span class="key">Status</span><span class="val"><span class="badge ${data.status === 'APPROVED' ? 'approved' : 'rejected'}">${data.status || 'Submitted'}</span></span></div>
+                    <div class="tx-box"><div class="tx-label">Transaction Hash</div>${data.transaction_hash || '0x...'}</div>
+                `;
+                pushActivityToast(`Passport application submitted for ${name}`, data.transaction_hash);
+            } else if (res.status === 409 && data.already_applied) {
+                showAlreadyApprovedApplication(data.application);
+            } else {
+                document.getElementById("applyTitle").textContent = "❌ Application Failed";
+                document.getElementById("applyDetails").innerHTML = `<div style="color:#f87171">${data.error || 'Unknown error'}</div>`;
+            }
+        } catch(err) {
+            resBox.className = "result show error";
+            document.getElementById("applyTitle").textContent = "❌ Network Error";
+            document.getElementById("applyDetails").innerHTML = `<div style="color:#f87171">Could not connect to middleware server.</div>`;
+        } finally {
+            btn.disabled = !applicationIdentityVerified;
+            btn.textContent = "Submit Application";
+        }
+    }
+
+    async function verifyApplicationIdentity() {
+        const name = document.getElementById("appName").value.trim();
+        const aadhaar = document.getElementById("appAadhaar").value.trim();
+        const verifyBtn = document.getElementById("verifyApplicationBtn");
+        const status = document.getElementById("applicationIdentityStatus");
+
+        if (!name || !/^\d{4}-\d{4}-\d{4}$/.test(aadhaar)) {
+            applicationIdentityVerified = false;
+            document.getElementById("applyBtn").disabled = true;
+            status.className = "identity-status error";
+            status.textContent = "Enter your registered name and a valid Aadhaar ID before verifying your identity.";
+            return;
+        }
+
+        verifyBtn.disabled = true;
+        verifyBtn.textContent = "Checking...";
+        applicationIdentityVerified = false;
+        document.getElementById("applyBtn").disabled = true;
+        document.getElementById("applicationIdentityDetails").className = "identity-proof-details";
+        document.getElementById("applicationIdentityDetails").innerHTML = "";
+        try {
+            const res = await apiFetch(`/aadhaar/verify/${encodeURIComponent(aadhaar)}?name=${encodeURIComponent(name)}`);
+            const data = await res.json();
+            if (!res.ok || !data.authenticated) {
+                if (res.status === 401 || res.status === 404) {
+                    const failureReason = data.error || "Identity could not be authenticated.";
+                    try {
+                        const outcome = await recordRejectedPassportApplication(name, aadhaar, failureReason);
+                        if (outcome === "already-approved") {
+                            status.className = "identity-status error";
+                            status.textContent = "This Aadhaar ID already has an approved passport application. You cannot apply again.";
+                            return;
+                        }
+                        status.className = "identity-status error";
+                        status.textContent = `${failureReason} This application was recorded as rejected.`;
+                    } catch (recordError) {
+                        status.className = "identity-status error";
+                        status.textContent = `${failureReason} The rejected application could not be recorded: ${recordError.message}`;
+                    }
+                    return;
+                }
+                throw new Error(data.error || "Identity could not be authenticated. You cannot apply yet.");
+            }
+            if (data.already_applied) {
+                showAlreadyApprovedApplication(data.previous_application);
+                status.className = "identity-status error";
+                status.textContent = "This Aadhaar ID already has an approved passport application. You cannot apply again.";
+                return;
+            }
+            applicationIdentityVerified = true;
+            status.className = "identity-status success";
+            status.textContent = "Identity authenticated. You can now submit your application.";
+            const details = document.getElementById("applicationIdentityDetails");
+            details.className = "identity-proof-details show";
+            details.innerHTML = `
+                <div class="result-row"><span class="key">Status</span><span class="val"><span class="badge approved">Authenticated</span></span></div>
+                <div class="result-row"><span class="key">Applicant name</span><span class="val">${name}</span></div>
+                <div class="result-row"><span class="key">Identity reference</span><span class="val">${data.aadhaar_id}</span></div>
+                <div class="result-row"><span class="key">Identity record</span><span class="val">${data.identity_hash}</span></div>
+                <div class="result-row"><span class="key">Verification record</span><span class="val">${data.signature}</span></div>
+                <div class="result-row"><span class="key">Latest update</span><span class="val">${data.block_number}</span></div>
+            `;
+            document.getElementById("applyBtn").disabled = false;
+        } catch (error) {
+            status.className = "identity-status error";
+            status.textContent = error.message || "Identity could not be authenticated. You cannot apply yet.";
+        } finally {
+            verifyBtn.disabled = false;
+            verifyBtn.textContent = "Verify identity";
+        }
+    }
+
+    async function recordRejectedPassportApplication(name, aadhaar, reason) {
+        const attemptKey = `${name.trim().toLocaleLowerCase()}|${aadhaar}`;
+        if (rejectedApplicationAttempt === attemptKey) return;
+
+        const response = await apiFetch("/passport/apply", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ name, aadhaar_id: aadhaar })
+        });
+        const data = await response.json();
+        if (response.status === 409 && data.already_applied) {
+            showAlreadyApprovedApplication(data.application);
+            return "already-approved";
+        }
+        if (!response.ok) throw new Error(data.error || "Unable to record the rejected application.");
+        if (data.status !== "REJECTED") throw new Error("The identity failure was not recorded as a rejection.");
+
+        rejectedApplicationAttempt = attemptKey;
+        const result = document.getElementById("applyResult");
+        result.className = "result show error";
+        document.getElementById("applyTitle").textContent = "❌ Passport Application Rejected";
+        document.getElementById("applyDetails").innerHTML = `
+            <div class="result-row"><span class="key">Applicant</span><span class="val">${escapeHtml(name)}</span></div>
+            <div class="result-row"><span class="key">Decision</span><span class="val"><span class="badge rejected">REJECTED</span></span></div>
+            <div class="result-row"><span class="key">Reason</span><span class="val">${escapeHtml(reason)}</span></div>
+            <div class="tx-box"><div class="tx-label">Application reference</div>${escapeHtml(data.transaction_hash || "Recorded")}</div>
+        `;
+        pushActivityToast(`Passport application rejected for ${name}`, data.transaction_hash);
+        await loadStatus();
+        return "rejected";
+    }
+
+    function showAlreadyApprovedApplication(application) {
+        applicationIdentityVerified = false;
+        document.getElementById("applyBtn").disabled = true;
+        const result = document.getElementById("applyResult");
+        result.className = "result show info";
+        document.getElementById("applyTitle").textContent = "✅ Passport Already Approved";
+        document.getElementById("applyDetails").innerHTML = `
+            <div class="result-row"><span class="key">Status</span><span class="val"><span class="badge approved">APPROVED</span></span></div>
+            <div class="result-row"><span class="key">Previous application</span><span class="val">#${escapeHtml(application?.app_id ?? "—")}</span></div>
+            <div class="result-row"><span class="key">Applicant</span><span class="val">${escapeHtml(application?.applicant_name ?? document.getElementById("appName").value.trim())}</span></div>
+            <p>This Aadhaar ID already has an approved passport application. A second application cannot be submitted.</p>
+        `;
+    }
+
+    async function fetchCitizens() {
+        const list = document.getElementById("citizensList");
+        list.innerHTML = `<div class="loading">Loading citizens from blockchain ledger...</div>`;
+        try {
+            const res = await apiFetch(`/aadhaar/citizens`);
+            const data = await res.json();
+            if (!res.ok || !data.citizens || data.citizens.length === 0) {
+                list.innerHTML = `<div class="empty-state"><div class="icon">📂</div><div class="msg">No registered citizens found on the ledger yet.</div></div>`;
+                return;
+            }
+            let html = "";
+            data.citizens.forEach(c => {
+                html += `
+                    <div class="citizen-card">
+                        <div>
+                            <div class="citizen-name">Identity record</div>
+                            <div class="citizen-meta">Hash: ${c.identity_hash || 'Pending proof'}</div>
+                        </div>
+                        <div class="citizen-id">${c.aadhaar_id || c[2]}</div>
+                    </div>`;
+            });
+            list.innerHTML = html;
+        } catch(e) {
+            list.innerHTML = `<div class="empty-state"><div class="icon">⚠️</div><div class="msg">Could not fetch records. Verify middleware is active.</div></div>`;
+        }
+    }
+
+    async function fetchApplications() {
+        const list = document.getElementById("applicationsList");
+        list.innerHTML = `<div class="loading">Loading applications from passport chain...</div>`;
+        try {
+            const res = await apiFetch(`/passport/applications`);
+            const data = await res.json();
+            if (!res.ok || !data.applications || data.applications.length === 0) {
+                list.innerHTML = `<div class="empty-state"><div class="icon">⛓️</div><div class="msg">No passport applications submitted yet.</div></div>`;
+                return;
+            }
+            let html = "";
+            data.applications.forEach(a => {
+                html += `
+                    <div class="app-card">
+                        <div class="app-title"><span>${a.applicant_name || a.name || a[0]}</span> <span class="badge ${a.status === 'APPROVED' ? 'approved' : 'rejected'}">${a.status || 'Logged'}</span></div>
+                        <div style="color:#94a3b8; font-size:0.8rem;">Aadhaar ID: <span style="color:#c4b5fd; font-family:monospace;">${a.aadhaar_id || a[1]}</span></div>
+                        <div class="hash-text">Application #${a.app_id || '—'} · Recorded on passport chain</div>
+                    </div>`;
+            });
+            list.innerHTML = html;
+        } catch(e) {
+            list.innerHTML = `<div class="empty-state"><div class="icon">⚠️</div><div class="msg">Could not fetch applications. Verify middleware is active.</div></div>`;
+        }
+    }
+
+    // Auto-poll status every 3 seconds
+    setInterval(loadStatus, 3000);
+    loadStatus();
+    activateTabFromUrl();
+</script>
+</body>
+</html>

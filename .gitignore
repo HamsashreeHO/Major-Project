@@ -1,0 +1,38 @@
+# Python
+__pycache__/
+*.py[cod]
+*.pyo
+*.pyd
+.Python
+*.pyc
+
+# Node modules
+node_modules/
+
+# Ganache data
+.ganache/
+
+# Build files
+build/
+
+# Environment
+.env
+*.env
+
+# Keys (IMPORTANT - never push private keys)
+crypto_core/aadhaar_keys.json
+
+# Citizens data
+crypto_core/citizens.json
+
+# Local authentication accounts and Flask session signing key
+middleware/accounts.json
+middleware/accounts.json.tmp
+middleware/.session_secret
+
+# VS Code
+.vscode/
+
+# Windows
+Thumbs.db
+Desktop.ini
