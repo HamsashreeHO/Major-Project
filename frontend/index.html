@@ -877,6 +877,10 @@
                 <div class="form-hint" id="regHint">Format: 4 digits-4 digits-4 digits</div>
             </div>
             <div class="form-group">
+                <label for="regPin">Create 4-digit PIN</label>
+                <input type="password" id="regPin" inputmode="numeric" pattern="[0-9]{4}" maxlength="4" autocomplete="new-password" placeholder="4-digit PIN" />
+            </div>
+            <div class="form-group">
                 <label for="regGender">Gender</label>
                 <select id="regGender">
                     <option value="">Select gender</option>
@@ -938,6 +942,10 @@
                 <label>Aadhaar ID</label>
                 <input type="text" id="appAadhaar" placeholder="e.g. 1111-2222-3333" oninput="checkAadhaarFormat(this, 'appHint')" />
                 <div class="form-hint" id="appHint">Format: 4 digits-4 digits-4 digits</div>
+            </div>
+            <div class="form-group">
+                <label for="appPin">Registered 4-digit PIN</label>
+                <input type="password" id="appPin" inputmode="numeric" pattern="[0-9]{4}" maxlength="4" autocomplete="off" placeholder="Enter your registration PIN" />
             </div>
             <section class="identity-check" aria-labelledby="identityCheckTitle">
                 <h3 id="identityCheckTitle">Verify your identity</h3>
@@ -1198,7 +1206,7 @@
     document.getElementById("progressAadhaar").addEventListener("input", (event) => {
         checkAadhaarFormat(event.target, "progressHint");
     });
-    ["appName", "appAadhaar"].forEach((id) => {
+    ["appName", "appAadhaar", "appPin"].forEach((id) => {
         document.getElementById(id).addEventListener("input", () => {
             applicationIdentityVerified = false;
             rejectedApplicationAttempt = null;
@@ -1395,11 +1403,12 @@
         const name = document.getElementById("regName").value.trim();
         const dob = document.getElementById("regDob").value.trim();
         const aadhaar = document.getElementById("regAadhaar").value.trim();
+        const pin = document.getElementById("regPin").value;
         const btn = document.getElementById("regBtn");
         const resBox = document.getElementById("regResult");
 
-        if (!name || !dob || !aadhaar) {
-            alert("Please fill in all fields.");
+        if (!name || !dob || !aadhaar || !/^\d{4}$/.test(pin)) {
+            alert("Please fill in all fields and set a 4-digit PIN.");
             return;
         }
         btn.disabled = true;
@@ -1409,7 +1418,7 @@
             const res = await apiFetch(`/aadhaar/register`, {
                 method: "POST",
                 headers: { "Content-Type": "application/json" },
-                body: JSON.stringify({ name, dob, aadhaar_id: aadhaar })
+                body: JSON.stringify({ name, dob, aadhaar_id: aadhaar, pin })
             });
             const data = await res.json();
             resBox.className = "result show " + (res.ok ? "success" : "error");
@@ -1439,11 +1448,12 @@
     async function applyPassport() {
         const name = document.getElementById("appName").value.trim();
         const aadhaar = document.getElementById("appAadhaar").value.trim();
+        const pin = document.getElementById("appPin").value;
         const btn = document.getElementById("applyBtn");
         const resBox = document.getElementById("applyResult");
 
-        if (!name || !aadhaar) {
-            alert("Please fill in all fields.");
+        if (!name || !aadhaar || !/^\d{4}$/.test(pin)) {
+            alert("Please enter your name, Aadhaar ID, and registered 4-digit PIN.");
             return;
         }
         if (!applicationIdentityVerified) {
@@ -1458,7 +1468,7 @@
             const res = await apiFetch(`/passport/apply`, {
                 method: "POST",
                 headers: { "Content-Type": "application/json" },
-                body: JSON.stringify({ name, aadhaar_id: aadhaar })
+                body: JSON.stringify({ name, aadhaar_id: aadhaar, pin })
             });
             const data = await res.json();
             resBox.className = "result show " + (res.ok ? "success" : "error");
@@ -1490,14 +1500,15 @@
     async function verifyApplicationIdentity() {
         const name = document.getElementById("appName").value.trim();
         const aadhaar = document.getElementById("appAadhaar").value.trim();
+        const pin = document.getElementById("appPin").value;
         const verifyBtn = document.getElementById("verifyApplicationBtn");
         const status = document.getElementById("applicationIdentityStatus");
 
-        if (!name || !/^\d{4}-\d{4}-\d{4}$/.test(aadhaar)) {
+        if (!name || !/^\d{4}-\d{4}-\d{4}$/.test(aadhaar) || !/^\d{4}$/.test(pin)) {
             applicationIdentityVerified = false;
             document.getElementById("applyBtn").disabled = true;
             status.className = "identity-status error";
-            status.textContent = "Enter your registered name and a valid Aadhaar ID before verifying your identity.";
+            status.textContent = "Enter your registered name, valid Aadhaar ID, and 4-digit PIN before verifying your identity.";
             return;
         }
 
@@ -1508,13 +1519,17 @@
         document.getElementById("applicationIdentityDetails").className = "identity-proof-details";
         document.getElementById("applicationIdentityDetails").innerHTML = "";
         try {
-            const res = await apiFetch(`/aadhaar/verify/${encodeURIComponent(aadhaar)}?name=${encodeURIComponent(name)}`);
+            const res = await apiFetch(`/aadhaar/verify/${encodeURIComponent(aadhaar)}`, {
+                method: "POST",
+                headers: { "Content-Type": "application/json" },
+                body: JSON.stringify({ name, pin })
+            });
             const data = await res.json();
             if (!res.ok || !data.authenticated) {
                 if (res.status === 401 || res.status === 404) {
                     const failureReason = data.error || "Identity could not be authenticated.";
                     try {
-                        const outcome = await recordRejectedPassportApplication(name, aadhaar, failureReason);
+                        const outcome = await recordRejectedPassportApplication(name, aadhaar, pin, failureReason);
                         if (outcome === "already-approved") {
                             status.className = "identity-status error";
                             status.textContent = "This Aadhaar ID already has an approved passport application. You cannot apply again.";
@@ -1559,14 +1574,14 @@
         }
     }
 
-    async function recordRejectedPassportApplication(name, aadhaar, reason) {
+    async function recordRejectedPassportApplication(name, aadhaar, pin, reason) {
         const attemptKey = `${name.trim().toLocaleLowerCase()}|${aadhaar}`;
         if (rejectedApplicationAttempt === attemptKey) return;
 
         const response = await apiFetch("/passport/apply", {
             method: "POST",
             headers: { "Content-Type": "application/json" },
-            body: JSON.stringify({ name, aadhaar_id: aadhaar })
+            body: JSON.stringify({ name, aadhaar_id: aadhaar, pin })
         });
         const data = await response.json();
         if (response.status === 409 && data.already_applied) {

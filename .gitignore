@@ -28,6 +28,8 @@ crypto_core/citizens.json
 # Local authentication accounts and Flask session signing key
 middleware/accounts.json
 middleware/accounts.json.tmp
+middleware/aadhaar_pins.json
+middleware/aadhaar_pins.json.tmp
 middleware/.session_secret
 
 # VS Code

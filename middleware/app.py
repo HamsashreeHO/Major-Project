@@ -14,9 +14,9 @@ sys.path.append(os.path.join(os.path.dirname(__file__), '..', 'crypto_core'))
 from crypto_utils import generate_identity_hash, generate_name_hash, sign_identity, verify_signature
 from keys         import load_or_generate_keys
 try:
-    from .auth_store import DEVELOPER_USNS, hash_password, load_accounts, save_accounts, verify_developer_password, verify_password
+    from .auth_store import DEVELOPER_USNS, hash_aadhaar_pin, hash_password, load_accounts, load_aadhaar_pins, save_accounts, save_aadhaar_pins, verify_aadhaar_pin, verify_developer_password, verify_password
 except ImportError:
-    from auth_store import DEVELOPER_USNS, hash_password, load_accounts, save_accounts, verify_developer_password, verify_password
+    from auth_store import DEVELOPER_USNS, hash_aadhaar_pin, hash_password, load_accounts, load_aadhaar_pins, save_accounts, save_aadhaar_pins, verify_aadhaar_pin, verify_developer_password, verify_password
 
 app  = Flask(__name__)
 app.config.update(
@@ -217,7 +217,7 @@ def home():
             "POST /aadhaar/register",
             "GET  /aadhaar/citizens",
             "GET  /aadhaar/proof/<aadhaar_id>",
-            "GET  /aadhaar/verify/<aadhaar_id>",
+            "POST /aadhaar/verify/<aadhaar_id>",
             "POST /passport/apply",
             "GET  /passport/progress/<aadhaar_id>",
             "GET  /passport/applications",
@@ -274,9 +274,10 @@ def register_citizen():
     name       = data.get("name")
     dob        = data.get("dob")
     aadhaar_id = data.get("aadhaar_id")
+    pin        = str(data.get("pin", ""))
 
-    if not name or not dob or not aadhaar_id:
-        return jsonify({"error": "name, dob and aadhaar_id are required"}), 400
+    if not name or not dob or not aadhaar_id or not re.fullmatch(r"\d{4}", pin):
+        return jsonify({"error": "name, dob, aadhaar_id and a 4-digit pin are required"}), 400
 
     try:
         # Check if already registered on blockchain
@@ -298,6 +299,10 @@ def register_citizen():
                 signature
             )
         )
+
+        pin_records = load_aadhaar_pins()
+        pin_records[aadhaar_id] = {"name": name, **hash_aadhaar_pin(pin)}
+        save_aadhaar_pins(pin_records)
 
         return jsonify({
             "success"         : True,
@@ -368,13 +373,15 @@ def get_identity_proof(aadhaar_id):
 # ═══════════════════════════════════════════════════
 # ROUTE 6 — Authenticate identity proof
 # ═══════════════════════════════════════════════════
-@app.route("/aadhaar/verify/<aadhaar_id>", methods=["GET"])
+@app.route("/aadhaar/verify/<aadhaar_id>", methods=["POST"])
 @require_roles("applicant")
 def verify_identity_proof(aadhaar_id):
     try:
-        applicant_name = request.args.get("name", "").strip()
-        if not applicant_name:
-            return jsonify({"authenticated": False, "error": "Name is required for identity verification"}), 400
+        data = request.get_json() or {}
+        applicant_name = str(data.get("name", "")).strip()
+        pin = str(data.get("pin", ""))
+        if not applicant_name or not re.fullmatch(r"\d{4}", pin):
+            return jsonify({"authenticated": False, "error": "Name and a 4-digit PIN are required for identity verification"}), 400
 
         proof = aadhaar_contract.functions.getIdentityProof(aadhaar_id).call()
         identity_hash = proof[0]
@@ -391,6 +398,9 @@ def verify_identity_proof(aadhaar_id):
             return jsonify({"authenticated": False, "error": "Identity proof could not be authenticated"}), 401
         if not hmac.compare_digest(generate_name_hash(applicant_name), name_hash):
             return jsonify({"authenticated": False, "error": "Name does not match the registered identity"}), 401
+        pin_record = load_aadhaar_pins().get(aadhaar_id)
+        if not pin_record or not verify_aadhaar_pin(pin, pin_record):
+            return jsonify({"authenticated": False, "error": "PIN does not match the registered Aadhaar identity"}), 401
 
         approved_application = find_approved_application(aadhaar_id)
 
@@ -417,9 +427,10 @@ def apply_for_passport():
     data           = request.get_json()
     applicant_name = data.get("name")
     aadhaar_id     = data.get("aadhaar_id")
+    pin            = str(data.get("pin", ""))
 
-    if not applicant_name or not aadhaar_id:
-        return jsonify({"error": "name and aadhaar_id are required"}), 400
+    if not applicant_name or not aadhaar_id or not re.fullmatch(r"\d{4}", pin):
+        return jsonify({"error": "name, aadhaar_id and a 4-digit pin are required"}), 400
 
     try:
         approved_application = find_approved_application(aadhaar_id)
@@ -444,13 +455,16 @@ def apply_for_passport():
             verified = False
             identity_hash = "0" * 64
         else:
-            verified = verify_signature(public_key, identity_hash, signature) and hmac.compare_digest(generate_name_hash(applicant_name), name_hash)
+            pin_record = load_aadhaar_pins().get(aadhaar_id)
+            pin_matches = bool(pin_record and verify_aadhaar_pin(pin, pin_record))
+            identity_matches = verify_signature(public_key, identity_hash, signature) and hmac.compare_digest(generate_name_hash(applicant_name), name_hash)
+            verified = identity_matches and pin_matches
             if verified:
                 status = "APPROVED"
-                reason = "Identity verified successfully"
+                reason = "Identity and PIN verified successfully"
             else:
                 status   = "REJECTED"
-                reason   = "Name mismatch or invalid identity proof"
+                reason = "PIN mismatch" if identity_matches else "Name mismatch or invalid identity proof"
 
         # Step 3: Record result on Passport blockchain
         receipt = send_transaction(

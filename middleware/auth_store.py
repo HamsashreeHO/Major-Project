@@ -5,6 +5,7 @@ import os
 import secrets
 
 AUTH_FILE = os.path.join(os.path.dirname(__file__), "accounts.json")
+AADHAAR_PIN_FILE = os.path.join(os.path.dirname(__file__), "aadhaar_pins.json")
 DEVELOPER_USNS = {
     "1si23is025",
     "1si23is038",
@@ -33,6 +34,20 @@ def save_accounts(accounts):
     os.replace(temporary_file, AUTH_FILE)
 
 
+def load_aadhaar_pins():
+    if not os.path.exists(AADHAAR_PIN_FILE):
+        return {}
+    with open(AADHAAR_PIN_FILE, "r", encoding="utf-8") as pin_file:
+        return json.load(pin_file)
+
+
+def save_aadhaar_pins(pin_records):
+    temporary_file = AADHAAR_PIN_FILE + ".tmp"
+    with open(temporary_file, "w", encoding="utf-8") as pin_file:
+        json.dump(pin_records, pin_file, indent=2)
+    os.replace(temporary_file, AADHAAR_PIN_FILE)
+
+
 def hash_password(password, salt=None):
     salt = salt or secrets.token_hex(16)
     digest = hashlib.pbkdf2_hmac(
@@ -44,6 +59,19 @@ def hash_password(password, salt=None):
 def verify_password(password, account):
     actual = hash_password(password, account["salt"])["password_hash"]
     return hmac.compare_digest(actual, account["password_hash"])
+
+
+def hash_aadhaar_pin(pin, salt=None):
+    salt = salt or secrets.token_hex(16)
+    digest = hashlib.pbkdf2_hmac(
+        "sha256", pin.encode("utf-8"), bytes.fromhex(salt), PASSWORD_ITERATIONS
+    ).hex()
+    return {"pin_salt": salt, "pin_hash": digest}
+
+
+def verify_aadhaar_pin(pin, record):
+    actual = hash_aadhaar_pin(pin, record["pin_salt"])["pin_hash"]
+    return hmac.compare_digest(actual, record["pin_hash"])
 
 
 def verify_developer_password(password):
