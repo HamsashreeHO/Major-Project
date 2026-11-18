@@ -3,6 +3,7 @@ from datetime import datetime
 import asyncio
 import hmac
 import json
+import logging
 import os
 import re
 import secrets
@@ -11,9 +12,36 @@ import sys
 from fastapi import FastAPI, Request
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
+from starlette.exceptions import HTTPException as StarletteHTTPException
+from starlette.formparsers import MultiPartException
 from starlette.middleware.sessions import SessionMiddleware
+from starlette.datastructures import UploadFile
 from web3 import AsyncWeb3
 from web3.providers import AsyncHTTPProvider
+
+from pathlib import Path
+
+BASE_DIR = Path(__file__).resolve().parent
+
+CERT_PATH = (
+    BASE_DIR / "certificates" /
+    "uidai_offline_publickey_2026.cer"
+)
+
+from middleware.document_upload import (
+    DocumentUploadError,
+    configured_max_upload_bytes,
+    validated_upload,
+)
+from middleware.aadhaar_ekyc_xml import MAX_ZIP_BYTES as EKYC_MAX_ZIP_BYTES, verify_ekyc_zip
+from middleware.aadhaar_secure_qr import pinned_certificates, pinned_public_keys, verify_secure_qr
+from middleware.aadhaar_validation import canonical_aadhaar, match_signed_details
+from middleware.verification_state import VerificationState, session_binding
+from middleware.eaadhaar_pdf import (
+    compare_applicant_details,
+    extract_eaadhaar_details,
+    generate_eaadhaar_password,
+)
 
 sys.path.append(os.path.join(os.path.dirname(__file__), '..', 'crypto_core'))
 from crypto_utils import (
@@ -61,6 +89,14 @@ except ImportError:
     )
 
 app = FastAPI(title="Cross-Blockchain Middleware")
+logger = logging.getLogger(__name__)
+
+AADHAAR_FIELD_LABELS = {
+    "name": "Name",
+    "dob": "DOB",
+    "gender": "Gender",
+    "aadhaar_id": "Aadhaar number",
+}
 
 SESSION_SECRET_FILE = os.path.join(os.path.dirname(__file__), ".session_secret")
 if not os.path.exists(SESSION_SECRET_FILE):
@@ -104,6 +140,7 @@ def require_roles(*allowed_roles):
 
 async def establish_session(request: Request, role, username, email, name=None):
     request.session.clear()
+    request.session["sid"] = secrets.token_urlsafe(16)
     user = {
         "role": role,
         "username": username,
@@ -112,6 +149,38 @@ async def establish_session(request: Request, role, username, email, name=None):
     }
     request.session["user"] = user
     return JSONResponse({"success": True, "user": user})
+
+
+GENERIC_ERROR = "The request could not be completed"
+GENERIC_IDENTITY_ERROR = "Identity could not be verified"
+LOCKED_ERROR = "Too many attempts. Please try again later."
+verification_state = VerificationState()
+
+
+def server_error(context, error):
+    # Log only the exception type: web3 errors can echo call arguments (Aadhaar IDs).
+    logger.error("%s failed: %s", context, type(error).__name__)
+    return JSONResponse({"error": GENERIC_ERROR}, status_code=500)
+
+
+def session_email(request):
+    return str((request.session.get("user") or {}).get("email", "")).strip().lower()
+
+
+def owns_aadhaar(request, aadhaar_id):
+    """A signed-in applicant may only use the Aadhaar ID they registered."""
+    record = load_aadhaar_pins().get(aadhaar_id) or {}
+    owner = str(record.get("email", "")).strip().lower()
+    email = session_email(request)
+    return bool(owner and email and hmac.compare_digest(owner, email))
+
+
+def lockout_keys(request, aadhaar_id):
+    return (f"id:{aadhaar_id}", f"user:{session_email(request)}")
+
+
+def binding_for(request, aadhaar_id):
+    return session_binding(request.session.setdefault("sid", secrets.token_urlsafe(16)), session_email(request), aadhaar_id)
 
 
 # ─────────────────────────────────────────
@@ -406,7 +475,7 @@ async def health():
             "network_id": await w3.net.version,
         })
     except Exception as e:
-        return JSONResponse({"error": str(e)}, status_code=500)
+        return server_error("request", e)
 
 
 @app.get("/stats")
@@ -426,29 +495,411 @@ async def public_stats():
             "rejected": rejected,
         })
     except Exception as e:
-        return JSONResponse({"error": str(e)}, status_code=500)
+        return server_error("request", e)
 
 
 @app.post("/aadhaar/register")
 @require_roles("applicant")
 async def register_citizen(request: Request):
-    data = await request.json() or {}
-    name = data.get("name")
-    dob = data.get("dob")
-    aadhaar_id = data.get("aadhaar_id")
-    pin = str(data.get("pin", ""))
+    max_upload_bytes = configured_max_upload_bytes()
+    content_length = request.headers.get("content-length")
+    if content_length:
+        try:
+            if int(content_length) > max_upload_bytes + 128 * 1024:
+                return JSONResponse({
+                    "error": "The uploaded document exceeds the size limit",
+                    "verification_status": "VERIFICATION_FAILED",
+                    "stages_completed": [],
+                }, status_code=413)
+        except ValueError:
+            return JSONResponse({
+                "error": "The request has an invalid Content-Length",
+                "verification_status": "VERIFICATION_FAILED",
+                "stages_completed": [],
+            }, status_code=400)
+
     try:
-        mobile = normalize_mobile(data.get("mobile"), SMS_DEFAULT_COUNTRY_CODE)
+        form = await request.form(
+            max_files=1,
+            max_fields=10,
+            max_part_size=16 * 1024,
+        )
+    except (MultiPartException, StarletteHTTPException):
+        return JSONResponse({
+            "error": "Registration requires a valid multipart/form-data request",
+            "verification_status": "VERIFICATION_FAILED",
+            "stages_completed": [],
+        }, status_code=400)
+
+    stages_completed = []
+    try:
+        def form_text(field):
+            value = form.get(field)
+            return value.strip() if isinstance(value, str) else ""
+
+        name = form_text("name")
+        dob = form_text("dob")
+        aadhaar_id = form_text("aadhaar_id")
+        pin = form_text("pin")
+        gender = form_text("gender")
+        upload = form.get("aadhaar_document")
+
+        # Offline e-KYC XML is the only registration method unless the PDF path is
+        # explicitly restored with REGISTRATION_ALLOW_PDF=true.
+        if form_text("verification_method") != "offline_xml" and not pdf_registration_allowed():
+            return _requirement_rejected("REGISTRATION_METHOD_UNSUPPORTED")
+
+        if (
+            not name
+            or not dob
+            or not aadhaar_id
+            or not gender
+            or not re.fullmatch(r"\d{4}", pin)
+        ):
+            return JSONResponse({
+                "error": "name, dob, Aadhaar ID, gender and a 4-digit PIN are required",
+                "verification_status": "VERIFICATION_FAILED",
+                "stages_completed": [],
+            }, status_code=400)
+
+        try:
+            aadhaar_id = canonical_aadhaar(aadhaar_id)
+        except ValueError:
+            return JSONResponse({
+                "error": "Enter a valid 12-digit Aadhaar number",
+                "verification_status": "VERIFICATION_FAILED",
+                "stages_completed": [],
+            }, status_code=400)
+
+        if form_text("verification_method") == "offline_xml":
+            return await _register_with_ekyc_xml(request, form, name, dob, aadhaar_id, pin, gender)
+
+        try:
+            pdf_password = generate_eaadhaar_password(name, dob)
+        except ValueError:
+            return JSONResponse({
+                "error": "Enter a valid name and date of birth",
+                "verification_status": "VERIFICATION_FAILED",
+                "stages_completed": [],
+            }, status_code=400)
+
+        try:
+            mobile = normalize_mobile(form_text("mobile"), SMS_DEFAULT_COUNTRY_CODE)
+        except ValueError:
+            return JSONResponse({
+                "error": "A valid registered mobile number is required",
+                "verification_status": "VERIFICATION_FAILED",
+                "stages_completed": [],
+            }, status_code=400)
+
+        if not isinstance(upload, UploadFile):
+            return JSONResponse({
+                "error": "Upload an Aadhaar document with the registration form",
+                "verification_status": "VERIFICATION_FAILED",
+                "stages_completed": [],
+            }, status_code=400)
+
+        field_results = None
+        processing_status = {
+            "pdf_password": "NOT_VERIFIED",
+            "text_extraction": "NOT_STARTED",
+            "extraction_method": "NOT_STARTED",
+            "ocr": "NOT_STARTED",
+            "ocr_message": None,
+            "field_sources": {},
+            "ocr_confidence": {},
+        }
+        try:
+            async with validated_upload(
+                upload,
+                max_bytes=max_upload_bytes,
+                password=pdf_password,
+            ) as document_path:
+                stages_completed.append("DOCUMENT_UPLOADED")
+                qr_result = await asyncio.to_thread(
+                    verify_secure_qr,
+                    document_path,
+                    pdf_password,
+                    pinned_public_keys(),
+                )
+                aadhaar_digits = aadhaar_id.replace("-", "")
+                if qr_result["ok"]:
+                    processing_status["extraction_method"] = "SECURE_QR"
+                    stages_completed.append("UIDAI_SIGNATURE_VERIFIED")
+                    matched = match_signed_details(
+                        qr_result["details"], name, dob, gender, aadhaar_digits
+                    )
+                    decision = matched["result"]
+                    reason_codes = matched["reason_codes"]
+                    authenticity = "UIDAI_SIGNATURE_VERIFIED"
+                    field_results = {
+                        field: "MATCH" if code == "OK" else "NO_MATCH"
+                        for field, code in reason_codes.items()
+                    }
+                elif qr_result["code"] != "QR_MISSING":
+                    # Present but invalid/unsupported QR: never fall back to OCR.
+                    logger.warning("Secure QR rejected: %s", qr_result["code"])
+                    decision = "rejected"
+                    reason_codes = {"document": qr_result["code"]}
+                    authenticity = "NOT_VERIFIED"
+                    field_results = {}
+                else:
+                    # No QR: OCR text is an UNSIGNED fallback and can never be "verified".
+                    extracted_details = extract_eaadhaar_details(
+                        document_path,
+                        pdf_password,
+                    )
+                    processing_status = {
+                        "pdf_password": extracted_details["password_status"],
+                        "text_extraction": (
+                            "COMPLETED"
+                            if extracted_details["text_available"]
+                            else "NO_TEXT"
+                        ),
+                        "extraction_method": extracted_details["extraction_method"],
+                        "ocr": extracted_details["ocr_status"],
+                        "ocr_message": extracted_details["ocr_message"],
+                        "field_sources": extracted_details["field_sources"],
+                        "ocr_confidence": extracted_details["ocr_confidence"],
+                    }
+                    stages_completed.append("UNSIGNED_OCR_FALLBACK")
+                    field_results = compare_applicant_details(
+                        extracted_details, name, dob, gender, aadhaar_id
+                    )
+                    authenticity = "NOT_VERIFIED"
+                    reason_codes = {"document": "QR_MISSING"}
+                    reason_codes.update({
+                        field: {"MATCH": "UNSIGNED_OCR_MATCH", "NO_MATCH": f"{field.upper()}_MISMATCH"}.get(result, f"{field.upper()}_UNAVAILABLE")
+                        for field, result in field_results.items()
+                    })
+                    decision = (
+                        "rejected"
+                        if "NO_MATCH" in field_results.values()
+                        else "pending"
+                    )
+                all_fields_match = decision == "verified"
+                if all_fields_match:
+                    stages_completed.append("DEMOGRAPHIC_DETAILS_MATCHED")
+
+            if decision != "verified":
+                return _not_verified_response(
+                    decision, reason_codes, authenticity, field_results,
+                    stages_completed, processing_status,
+                    "No UIDAI-signed QR code could be read, so the details cannot be "
+                    "verified automatically. Nothing was recorded on the blockchain.",
+                )
+            return await _register_verified_citizen(
+                request,
+                name,
+                dob,
+                aadhaar_id,
+                pin,
+                mobile,
+                field_results=field_results,
+                processing_status=processing_status,
+                verification={
+                    "result": "verified",
+                    "reason_codes": reason_codes,
+                    "document_authenticity": authenticity,
+                    "limitation": (
+                        "Signature checked against the pinned UIDAI certificate only; "
+                        "certificate chain and revocation are not validated."
+                    ),
+                },
+            )
+        except DocumentUploadError as error:
+            if str(error) == "Invalid e-Aadhaar PDF password":
+                processing_status["pdf_password"] = "FAILED"
+            return JSONResponse({
+                "success": False,
+                "verification_status": "VERIFICATION_FAILED",
+                "stages_completed": stages_completed,
+                "processing_status": processing_status,
+                "error": str(error),
+            }, status_code=error.status_code)
+    finally:
+        await form.close()
+
+
+REGISTRATION_REQUIREMENT_MESSAGE = (
+    "Registration requires the Aadhaar Offline e-KYC ZIP and its share code."
+)
+
+
+def pdf_registration_allowed():
+    """Off by default. REGISTRATION_ALLOW_PDF=true restores the PDF (Secure QR / OCR) path."""
+    return os.getenv("REGISTRATION_ALLOW_PDF", "").strip().lower() in ("1", "true", "yes", "on")
+
+
+def _requirement_rejected(code):
+    """Reason code plus a generic client message; no details about what was received."""
+    return JSONResponse({
+        "success": False,
+        "result": "rejected",
+        "verification_status": "VERIFICATION_FAILED",
+        "stages_completed": [],
+        "reason_codes": {"document": code},
+        "error": REGISTRATION_REQUIREMENT_MESSAGE,
+    }, status_code=400)
+
+
+def _ekyc_processing_status(code=None):
+    """What the result panel shows for the signed-file checks (no PDF/OCR rows)."""
+    checks = {"extraction_method": "OFFLINE_EKYC_XML", "zip": "OPENED", "signature": "VERIFIED", "freshness": "OK"}
+    if code is None or code == "EKYC_LAYOUT_UNEXPECTED":
+        return checks
+    if code.startswith(("EKYC_ZIP_", "EKYC_SHARE_CODE_", "EKYC_CONFIG_")):
+        checks.update(zip="FAILED", signature="NOT_CHECKED", freshness="NOT_CHECKED")
+    elif code.startswith("EKYC_SIGNATURE_") or code == "CERTIFICATE_UNAVAILABLE":
+        checks.update(signature="FAILED", freshness="NOT_CHECKED")
+    elif code in ("EKYC_STALE", "EKYC_FUTURE_DATED", "EKYC_TIMESTAMP_INVALID", "EKYC_REFERENCE_INVALID"):
+        checks.update(freshness="FAILED")
+    else:  # malformed XML or anything unexpected: nothing after the ZIP was established
+        checks.update(signature="NOT_CHECKED", freshness="NOT_CHECKED")
+    return checks
+
+
+def _not_verified_response(decision, reason_codes, authenticity, field_results,
+                           stages_completed, processing_status, pending_message):
+    logger.warning("Registration not verified: %s", decision)
+    review_fields = [
+        AADHAAR_FIELD_LABELS[field]
+        for field, result in (field_results or {}).items()
+        if result == "REVIEW_REQUIRED"
+    ]
+    return JSONResponse({
+        "success": False,
+        "result": decision,
+        "verification_status": (
+            "VERIFICATION_PENDING" if decision == "pending" else "VERIFICATION_FAILED"
+        ),
+        "stages_completed": stages_completed,
+        "field_results": field_results,
+        "reason_codes": reason_codes,
+        "document_authenticity": authenticity,
+        "manual_review_required": decision == "pending",
+        "review_required_fields": review_fields,
+        "review_message": pending_message if decision == "pending" else None,
+        "processing_status": processing_status,
+        "error": (
+            "Applicant details could not be verified against the uploaded "
+            "e-Aadhaar document."
+        ),
+    }, status_code=202 if decision == "pending" else 422)
+
+
+async def _register_with_ekyc_xml(request, form, name, dob, aadhaar_id, pin, gender):
+    """Signed Offline e-KYC XML (ZIP + 4-digit share code): the registration method.
+
+    The share code is never logged, echoed or stored. Reason codes only on failure.
+    """
+    def invalid(message):
+        return JSONResponse({
+            "error": message,
+            "verification_status": "VERIFICATION_FAILED",
+            "stages_completed": [],
+        }, status_code=400)
+
+    mobile_value = form.get("mobile")
+    try:
+        mobile = normalize_mobile(mobile_value.strip() if isinstance(mobile_value, str) else "", SMS_DEFAULT_COUNTRY_CODE)
     except ValueError:
-        return JSONResponse({"error": "A valid registered mobile number is required"}, status_code=400)
+        return invalid("A valid registered mobile number is required")
+    upload = form.get("ekyc_zip")
+    share_code = form.get("share_code")
+    if not isinstance(upload, UploadFile):
+        return _requirement_rejected("EKYC_ZIP_REQUIRED")
+    if not isinstance(share_code, str) or not share_code.strip():
+        await upload.close()
+        return _requirement_rejected("EKYC_SHARE_CODE_REQUIRED")
 
-    if not name or not dob or not aadhaar_id or not re.fullmatch(r"\d{4}", pin):
-        return JSONResponse({"error": "name, dob, Aadhaar ID, mobile number and a 4-digit PIN are required"}, status_code=400)
+    chunks, total = [], 0
+    await upload.seek(0)
+    while True:
+        chunk = await upload.read(64 * 1024)
+        if not chunk:
+            break
+        total += len(chunk)
+        if total > EKYC_MAX_ZIP_BYTES:
+            break
+        chunks.append(chunk)
+    await upload.close()
 
+    stages_completed = ["DOCUMENT_UPLOADED"]
+    if total > EKYC_MAX_ZIP_BYTES:
+        result = {"ok": False, "code": "EKYC_ZIP_TOO_LARGE"}
+    else:
+        result = await asyncio.to_thread(
+            verify_ekyc_zip, b"".join(chunks), share_code.strip(), pinned_certificates(),
+        )
+
+    processing_status = _ekyc_processing_status(None if result["ok"] else result["code"])
+    if not result["ok"]:
+        logger.warning("Offline e-KYC rejected: %s %s", result["code"], result.get("sub", ""))
+        return _not_verified_response(
+            "rejected", {"document": result["code"]}, "NOT_VERIFIED", {},
+            stages_completed, processing_status, None,
+        )
+
+    stages_completed.append("UIDAI_SIGNATURE_VERIFIED")
+    matched = match_signed_details(
+        result["details"], name, dob, gender, aadhaar_id.replace("-", "")
+    )
+    decision, reason_codes = matched["result"], matched["reason_codes"]
+    field_results = {
+        field: "MATCH" if code == "OK" else ("NO_MATCH" if code.endswith("_MISMATCH") else "REVIEW_REQUIRED")
+        for field, code in reason_codes.items()
+    }
+    if decision != "verified":
+        return _not_verified_response(
+            decision, reason_codes, "UIDAI_SIGNATURE_VERIFIED", field_results,
+            stages_completed, processing_status,
+            "The signed file did not contain every field needed to verify your details. "
+            "Nothing was recorded on the blockchain.",
+        )
+    stages_completed.append("DEMOGRAPHIC_DETAILS_MATCHED")
+    return await _register_verified_citizen(
+        request, name, dob, aadhaar_id, pin, mobile,
+        field_results=field_results,
+        processing_status=processing_status,
+        verification={
+            "result": "verified",
+            "reason_codes": reason_codes,
+            "document_authenticity": "UIDAI_SIGNATURE_VERIFIED",
+            "limitation": (
+                "Signature checked against the pinned UIDAI certificate only; "
+                "certificate chain and revocation are not validated. "
+                "Offline e-KYC XML was checked against one real file only; other variants are untested."
+            ),
+        },
+    )
+
+
+async def _register_verified_citizen(
+    request,
+    name,
+    dob,
+    aadhaar_id,
+    pin,
+    mobile,
+    field_results=None,
+    processing_status=None,
+    verification=None,
+):
     try:
         already = await aadhaar_contract.functions.isRegistered(aadhaar_id).call()
         if already:
-            return JSONResponse({"error": "Aadhaar ID already registered on blockchain"}, status_code=400)
+            return JSONResponse({
+                "error": (
+                    "This Aadhaar number is already registered. Your details were "
+                    "verified, but nothing new was recorded."
+                ),
+                "success": False,
+                "verification_status": "DETAILS_VERIFIED",
+                "field_results": field_results,
+                "processing_status": processing_status,
+                **(verification or {}),
+            }, status_code=400)
 
         identity_hash = generate_identity_hash(name, dob, aadhaar_id)
         name_hash = generate_name_hash(name)
@@ -477,13 +928,32 @@ async def register_citizen(request: Request):
             "success": True,
             "name": name,
             "aadhaar_id": aadhaar_id,
+            "verification_status": "DETAILS_VERIFIED",
+            "message": "e-Aadhaar details verified successfully.",
+            "field_results": field_results,
+            "processing_status": processing_status,
+            "document_authenticity": "NOT_VERIFIED",
+            "limitation": (
+                "UIDAI digital signature authenticity is not verified by this module."
+            ),
             "identity_hash": identity_hash,
             "transaction_hash": receipt.transactionHash.hex(),
             "block_number": receipt.blockNumber,
             "gas_used": receipt.gasUsed,
+            **(verification or {}),
         })
-    except Exception as e:
-        return JSONResponse({"error": str(e)}, status_code=500)
+    except Exception as error:
+        logger.error("registration failed: %s", type(error).__name__)
+        return JSONResponse({
+            "error": GENERIC_ERROR,
+            "verification_status": "DETAILS_VERIFIED",
+            "field_results": field_results,
+            "processing_status": processing_status,
+            "document_authenticity": "NOT_VERIFIED",
+            "limitation": (
+                "UIDAI digital signature authenticity is not verified by this module."
+            ),
+        }, status_code=500)
 
 
 @app.get("/aadhaar/citizens")
@@ -505,12 +975,18 @@ async def get_citizens(request: Request):
             "citizens": citizens,
         })
     except Exception as e:
-        return JSONResponse({"error": str(e)}, status_code=500)
+        return server_error("request", e)
 
 
 @app.get("/aadhaar/proof/{aadhaar_id}")
 @require_roles("applicant")
 async def get_identity_proof(request: Request, aadhaar_id: str):
+    try:
+        aadhaar_id = canonical_aadhaar(aadhaar_id)
+    except ValueError:
+        return JSONResponse({"found": False, "error": "Enter a valid 12-digit Aadhaar number"}, status_code=400)
+    if not owns_aadhaar(request, aadhaar_id):
+        return JSONResponse({"found": False, "error": "You do not have permission to access this service"}, status_code=403)
     try:
         proof = await aadhaar_contract.functions.getIdentityProof(aadhaar_id).call()
         identity_hash = proof[0]
@@ -532,12 +1008,22 @@ async def get_identity_proof(request: Request, aadhaar_id: str):
             "block_number": await w3.eth.block_number,
         })
     except Exception as e:
-        return JSONResponse({"error": str(e)}, status_code=500)
+        return server_error("request", e)
 
 
 @app.post("/aadhaar/verify/{aadhaar_id}")
 @require_roles("applicant")
 async def verify_identity_proof(request: Request, aadhaar_id: str):
+    try:
+        aadhaar_id = canonical_aadhaar(aadhaar_id)
+    except ValueError:
+        return JSONResponse({"authenticated": False, "error": "Enter a valid 12-digit Aadhaar number"}, status_code=400)
+    if not owns_aadhaar(request, aadhaar_id):
+        return JSONResponse({"authenticated": False, "error": "You do not have permission to access this service"}, status_code=403)
+    keys = lockout_keys(request, aadhaar_id)
+    if verification_state.is_locked(*keys):
+        return JSONResponse({"authenticated": False, "error": LOCKED_ERROR}, status_code=429)
+
     try:
         data = await request.json() or {}
         applicant_name = str(data.get("name", "")).strip()
@@ -546,52 +1032,26 @@ async def verify_identity_proof(request: Request, aadhaar_id: str):
             return JSONResponse({"authenticated": False, "error": "Name and a 4-digit PIN are required for identity verification"}, status_code=400)
 
         proof = await aadhaar_contract.functions.getIdentityProof(aadhaar_id).call()
-        identity_hash = proof[0]
-        signature = proof[1]
-        name_hash = proof[2]
-        timestamp = proof[3]
-        exists = proof[4]
-
-        if not exists:
-            return JSONResponse({"authenticated": False, "error": "Aadhaar ID not found"}, status_code=404)
-
-        authenticated = verify_signature(public_key, identity_hash, signature)
-        if not authenticated:
-            return JSONResponse({"authenticated": False, "error": "Identity proof could not be authenticated"}, status_code=401)
-        if not hmac.compare_digest(generate_name_hash(applicant_name), name_hash):
-            return JSONResponse({"authenticated": False, "error": "Name does not match the registered identity"}, status_code=401)
+        identity_hash, signature, name_hash, timestamp, exists = proof[0], proof[1], proof[2], proof[3], proof[4]
         pin_record = load_aadhaar_pins().get(aadhaar_id)
-        if not pin_record or not verify_aadhaar_pin(pin, pin_record):
-            return JSONResponse({"authenticated": False, "error": "PIN does not match the registered Aadhaar identity"}, status_code=401)
+        # Evaluate every check before answering so failures are indistinguishable.
+        checks = [
+            bool(exists),
+            bool(exists) and verify_signature(public_key, identity_hash, signature),
+            bool(exists) and hmac.compare_digest(generate_name_hash(applicant_name), name_hash),
+            bool(pin_record) and verify_aadhaar_pin(pin, pin_record),
+        ]
+        if not all(checks):
+            verification_state.record_failure(*keys)
+            return JSONResponse({"authenticated": False, "error": GENERIC_IDENTITY_ERROR}, status_code=401)
 
-        supplied_challenge = any(
-            data.get(field) is not None
-            for field in ("nonce", "request_id", "verification_signature", "identity_hash")
+        binding = binding_for(request, aadhaar_id)
+        request_id, nonce, expires_at = replay_protection.issue(binding)
+        verification_signature = sign_verification_message(
+            private_key, identity_hash, nonce, request_id
         )
-        if supplied_challenge:
-            request_id = str(data.get("request_id", ""))
-            nonce = str(data.get("nonce", ""))
-            verification_signature = str(data.get("verification_signature", ""))
-            requested_identity_hash = str(data.get("identity_hash", ""))
-            if not request_id or not nonce or not verification_signature or not requested_identity_hash:
-                return JSONResponse({"authenticated": False, "error": "Complete verification challenge is required"}, status_code=400)
-            if not hmac.compare_digest(requested_identity_hash, identity_hash):
-                return JSONResponse({"authenticated": False, "error": "Identity hash does not match the registered identity"}, status_code=401)
-            valid_nonce, nonce_error = replay_protection.consume(identity_hash, nonce, request_id)
-            if not valid_nonce:
-                return JSONResponse({"authenticated": False, "error": nonce_error}, status_code=401)
-            if not verify_verification_signature(public_key, identity_hash, nonce, request_id, verification_signature):
-                return JSONResponse({"authenticated": False, "error": "Verification signature is invalid"}, status_code=401)
-        else:
-            request_id, nonce, expires_at = replay_protection.issue(identity_hash)
-            verification_signature = sign_verification_message(
-                private_key, identity_hash, nonce, request_id
-            )
-            valid_nonce, nonce_error = replay_protection.consume(identity_hash, nonce, request_id)
-            if not valid_nonce or not verify_verification_signature(
-                public_key, identity_hash, nonce, request_id, verification_signature
-            ):
-                return JSONResponse({"authenticated": False, "error": "Verification challenge could not be authenticated"}, status_code=401)
+        verification_state.mark_verified(binding)
+        verification_state.reset(*keys)
 
         approved_application = await find_approved_application(aadhaar_id)
 
@@ -605,13 +1065,13 @@ async def verify_identity_proof(request: Request, aadhaar_id: str):
             "verification_signature": verification_signature,
             "nonce": nonce,
             "request_id": request_id,
-            "nonce_expires_at": expires_at if not supplied_challenge else None,
+            "nonce_expires_at": expires_at,
             "name_hash": name_hash,
             "timestamp": timestamp,
             "block_number": await w3.eth.block_number,
         })
     except Exception as e:
-        return JSONResponse({"error": str(e)}, status_code=500)
+        return server_error("identity verification", e)
 
 
 @app.post("/passport/apply")
@@ -619,11 +1079,29 @@ async def verify_identity_proof(request: Request, aadhaar_id: str):
 async def apply_for_passport(request: Request):
     data = await request.json() or {}
     applicant_name = data.get("name")
-    aadhaar_id = data.get("aadhaar_id")
     pin = str(data.get("pin", ""))
+    try:
+        aadhaar_id = canonical_aadhaar(data.get("aadhaar_id"))
+    except ValueError:
+        return JSONResponse({"error": "Enter a valid 12-digit Aadhaar number"}, status_code=400)
 
-    if not applicant_name or not aadhaar_id or not re.fullmatch(r"\d{4}", pin):
+    if not applicant_name or not re.fullmatch(r"\d{4}", pin):
         return JSONResponse({"error": "name, aadhaar_id and a 4-digit pin are required"}, status_code=400)
+    if not owns_aadhaar(request, aadhaar_id):
+        return JSONResponse({"error": "You do not have permission to access this service"}, status_code=403)
+    keys = lockout_keys(request, aadhaar_id)
+    if verification_state.is_locked(*keys):
+        return JSONResponse({"error": LOCKED_ERROR}, status_code=429)
+
+    # Server-side enforcement: a recent verification record AND a valid, single-use
+    # nonce bound to this session, applicant, Aadhaar ID and application are required.
+    binding = binding_for(request, aadhaar_id)
+    request_id = str(data.get("request_id", ""))
+    nonce = str(data.get("nonce", ""))
+    valid_nonce, _ = replay_protection.consume(binding, nonce, request_id)
+    if not verification_state.consume_verified(binding) or not valid_nonce:
+        verification_state.record_failure(*keys)
+        return JSONResponse({"error": "Identity verification is required before applying"}, status_code=403)
 
     try:
         approved_application = await find_approved_application(aadhaar_id)
@@ -635,33 +1113,24 @@ async def apply_for_passport(request: Request):
             }, status_code=409)
 
         proof = await aadhaar_contract.functions.getIdentityProof(aadhaar_id).call()
-        identity_hash = proof[0]
-        signature = proof[1]
-        name_hash = proof[2]
-        exists = proof[4]
-
-        if not exists:
-            status = "REJECTED"
-            reason = "Aadhaar ID not found on blockchain"
-            verified = False
-            identity_hash = "0" * 64
-        else:
-            pin_record = load_aadhaar_pins().get(aadhaar_id)
-            pin_matches = bool(pin_record and verify_aadhaar_pin(pin, pin_record))
-            identity_matches = verify_signature(public_key, identity_hash, signature) and hmac.compare_digest(generate_name_hash(applicant_name), name_hash)
-            verified = identity_matches and pin_matches
-            if verified:
-                status = "APPROVED"
-                reason = "Identity and PIN verified successfully"
-            else:
-                status = "REJECTED"
-                reason = "PIN mismatch" if identity_matches else "Name mismatch or invalid identity proof"
+        identity_hash, signature, name_hash, exists = proof[0], proof[1], proof[2], proof[4]
+        pin_record = load_aadhaar_pins().get(aadhaar_id)
+        checks = [
+            bool(exists),
+            bool(exists) and verify_signature(public_key, identity_hash, signature),
+            bool(exists) and hmac.compare_digest(generate_name_hash(applicant_name), name_hash),
+            bool(pin_record) and verify_aadhaar_pin(pin, pin_record),
+        ]
+        if not all(checks):
+            verification_state.record_failure(*keys)
+            return JSONResponse({"error": GENERIC_IDENTITY_ERROR}, status_code=401)
+        verification_state.reset(*keys)
 
         receipt = await send_transaction(
             passport_contract.functions.submitApplication(
                 aadhaar_id,
                 applicant_name,
-                status,
+                "APPROVED",
                 identity_hash,
             )
         )
@@ -669,9 +1138,9 @@ async def apply_for_passport(request: Request):
         return JSONResponse({
             "applicant": applicant_name,
             "aadhaar_id": aadhaar_id,
-            "status": status,
-            "reason": reason,
-            "verified": verified,
+            "status": "APPROVED",
+            "reason": "Identity and PIN verified successfully",
+            "verified": True,
             "transaction_hash": receipt.transactionHash.hex(),
             "block_number": receipt.blockNumber,
             "gas_used": receipt.gasUsed,
@@ -679,7 +1148,7 @@ async def apply_for_passport(request: Request):
             "identity_hash": identity_hash[:30] + "...",
         })
     except Exception as e:
-        return JSONResponse({"error": str(e)}, status_code=500)
+        return server_error("passport application", e)
 
 
 @app.get("/passport/applications")
@@ -702,7 +1171,7 @@ async def get_applications(request: Request):
             "applications": applications,
         })
     except Exception as e:
-        return JSONResponse({"error": str(e)}, status_code=500)
+        return server_error("request", e)
 
 
 @app.get("/passport/progress/{aadhaar_id}")
@@ -728,7 +1197,7 @@ async def get_applicant_progress(request: Request, aadhaar_id: str):
             "registration": ({"aadhaar_id": aadhaar_id} if proof[4] else None),
         })
     except Exception as e:
-        return JSONResponse({"error": str(e)}, status_code=500)
+        return server_error("request", e)
 
 
 @app.get("/passport/validate")
@@ -745,7 +1214,7 @@ async def validate(request: Request):
             "message": "Blockchain is valid and running on Ganache!",
         })
     except Exception as e:
-        return JSONResponse({"error": str(e)}, status_code=500)
+        return server_error("request", e)
 
 
 if __name__ == "__main__":
@@ -756,4 +1225,5 @@ if __name__ == "__main__":
     print(f"   Aadhaar Contract     : {AADHAAR_ADDRESS}")
     print(f"   Passport Contract    : {PASSPORT_ADDRESS}")
     print(f"   Server running at    : http://localhost:5000\n")
-    uvicorn.run(app, host="127.0.0.1", port=5000, reload=False)
+    # access_log is off: Aadhaar IDs appear in URL paths and must not be logged.
+    uvicorn.run(app, host="127.0.0.1", port=5000, reload=False, access_log=False)

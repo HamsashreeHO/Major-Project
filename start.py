@@ -87,9 +87,9 @@ if not reuse_existing_contracts:
 print(f"✅ AadhaarRegistry  : {aadhaar_address}")
 print(f"✅ PassportRegistry : {passport_address}")
 print("✅ Contract addresses ready (existing deployments are preserved).")
-print("\n⚠️  Please restart Flask now:")
-print("   Stop Flask (Ctrl+C) and run: python app.py")
-input("\nPress Enter after Flask is restarted...")
+print("\n⚠️  Please restart the FastAPI middleware now:")
+print("   Stop the middleware (Ctrl+C) and run: python -m middleware.app")
+input("\nPress Enter after the middleware is restarted...")
 
 print("\n🎉 Blockchain services are ready. Sign in to register identities through the portal.")
 print("\n🌐 Starting the frontend web server...")
