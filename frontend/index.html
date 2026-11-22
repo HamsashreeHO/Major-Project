@@ -1069,7 +1069,7 @@
             <form class="progress-form" id="progressForm">
                 <div class="form-group">
                     <label for="progressAadhaar">Aadhaar ID</label>
-                    <input type="text" id="progressAadhaar" placeholder="e.g. 1111-2222-3333" autocomplete="off" />
+                    <input type="text" id="progressAadhaar" placeholder="e.g. 1111 2222 3333" autocomplete="off" />
                     <div class="form-hint" id="progressHint">Format: 4 digits-4 digits-4 digits</div>
                 </div>
                 <button type="submit" class="btn">Check progress</button>
@@ -1130,7 +1130,7 @@
             accountButton.setAttribute("aria-expanded", "false");
         }
         if (role) {
-            const roleLabel = role === "developer" ? "Developer" : "Applicant";
+            const roleLabel = role === "developer" ? "Admin" : "Applicant";
             accountButton.title = `${roleLabel} account`;
             accountUsername.textContent = currentUser.name || currentUser.username || "Signed-in account";
             accountRole.textContent = `${roleLabel} account`;
@@ -1148,7 +1148,7 @@
         if (!card) return;
         const back = step === "role" ? "" : '<a class="auth-back" href="#auth" onclick="renderAuthStep(\'role\'); return false;">← Choose another role</a>';
         const screens = {
-            role: `${back}<h2>Who are you?</h2><p>Select the option that best describes how you will use IdentiGate.</p><div class="auth-role-grid"><button class="auth-role" type="button" onclick="openRoleAuth('applicant')"><strong>Applicant</strong><span>Apply for a passport and follow your application status.</span></button><button class="auth-role" type="button" onclick="openRoleAuth('developer')"><strong>Developer</strong><span>Review registered citizens and passport applications.</span></button></div>`
+            role: `${back}<h2>Who are you?</h2><p>Select the option that best describes how you will use IdentiGate.</p><div class="auth-role-grid"><button class="auth-role" type="button" onclick="openRoleAuth('applicant')"><strong>Applicant</strong><span>Apply for a passport and follow your application status.</span></button><button class="auth-role" type="button" onclick="openRoleAuth('developer')"><strong>Admin</strong><span>Review registered citizens and passport applications.</span></button></div>`
         };
         card.innerHTML = screens[step] || screens.role;
     }
@@ -1156,7 +1156,7 @@
     function openRoleAuth(role, mode) {
         const isDeveloper = role === "developer";
         const authMode = isDeveloper ? "login" : (mode || "signup");
-        const heading = isDeveloper ? "Developer sign in" : (authMode === "signup" ? "Create applicant account" : "Applicant sign in");
+        const heading = isDeveloper ? "Admin sign in" : (authMode === "signup" ? "Create applicant account" : "Applicant sign in");
         const description = isDeveloper
             ? "Sign in with an authorized team USN and provisioned password."
             : (authMode === "signup" ? "Create an account with your name, email, and password." : "Enter your email and password to continue.");
@@ -1170,7 +1170,7 @@
         const submitPath = isDeveloper ? "developer/login" : `applicant/${authMode}`;
         const toggle = !isDeveloper
             ? `<div class="auth-note">${authMode === "signup" ? 'Already have an account? <button class="auth-link" type="button" onclick="openRoleAuth(\'applicant\', \'login\')">Sign in</button>' : 'New to IdentiGate? <button class="auth-link" type="button" onclick="openRoleAuth(\'applicant\', \'signup\')">Create an account</button>'}</div>`
-            : '<div class="auth-note">Developer accounts are created by the team administrator for authorized USNs.</div>';
+            : '<div class="auth-note">Admin accounts are created by the team administrator for authorized USNs.</div>';
         document.getElementById("authCard").innerHTML = `${back}<h2>${heading}</h2><p>${description}</p><form class="auth-form" onsubmit="submitAuth(event, '${submitPath}')">${nameField}${identifier}<label>Password<input name="password" type="password" required minlength="8" autocomplete="${authMode === "signup" ? "new-password" : "current-password"}" placeholder="At least 8 characters" /></label><div class="auth-error" id="authError" role="alert"></div><button class="auth-submit" type="submit">${authMode === "signup" ? "Create account" : "Sign in"}</button></form>${toggle}`;
     }
 
@@ -1386,7 +1386,9 @@
         } else {
             input.className = "";
             hint.className = "form-hint";
-            hint.textContent = "Format: 4 digits-4 digits-4 digits";
+            hint.textContent = hintId === "progressHint"
+                ? "Format: 4 digits 4 digits 4 digits"
+                : "Format: 4 digits-4 digits-4 digits";
         }
     }
 
@@ -1427,12 +1429,13 @@
 
     async function fetchApplicantProgress(event) {
         event.preventDefault();
-        const aadhaar = document.getElementById("progressAadhaar").value.trim();
+        // Accept "5613 6248 6062" (or dashed); the backend stores the dashed form.
+        const aadhaar = canonicalAadhaar(document.getElementById("progressAadhaar").value);
         const hint = document.getElementById("progressHint");
         const result = document.getElementById("progressResult");
-        if (!/^\d{4}-\d{4}-\d{4}$/.test(aadhaar)) {
+        if (!aadhaar) {
             hint.className = "form-hint bad";
-            hint.textContent = "Enter the Aadhaar ID in 1111-2222-3333 format.";
+            hint.textContent = "Enter the Aadhaar ID in 1111 2222 3333 format.";
             result.innerHTML = `<div class="empty-state"><div class="icon">!</div><div class="msg">A valid Aadhaar ID is required.</div></div>`;
             return;
         }
