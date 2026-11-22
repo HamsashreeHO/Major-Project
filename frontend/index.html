@@ -395,6 +395,8 @@
         .btn:hover { background: #1f675e; box-shadow: 0 8px 20px rgba(40,125,114,.28); }
         .result.success { background: #edf7f0; border-color: #b6d8c1; }
         .result.error { background: #fff0ed; border-color: #efb8ad; }
+        .result.info { background: #f1eefc; border-color: #cfc6ee; }
+        .result-title { color: #17221f; }
         .result-row { border-bottom-color: #d9dfd9; }
         .result-row .key { color: #718078; }
         .result-row .val { color: #17221f; }
@@ -586,7 +588,21 @@
         .prerequisites li { grid-template-columns: 20px 1fr; }
         .prerequisites li::before { content: '✓'; width: auto; height: auto; background: none; color: #287d72; font-weight: 800; }
         .register-card { min-width: 0; }
-        .how-works-box { margin: 0; padding: 18px; background: #fffdf8; border: 1px solid #d9dfd9; border-top: 4px solid #e0a52f; border-radius: 4px; box-shadow: 0 8px 22px rgba(23,34,31,.06); }
+        .pin-reset-link { display: inline-block; margin: -8px 0 18px; padding: 0; border: 0; background: none; color: #287d72; font: inherit; text-decoration: underline; cursor: pointer; }
+        .pin-reset-panel { margin: 2px 0 20px; padding: 16px; border: 1px solid #cfd8d2; border-radius: 4px; background: rgba(40,125,114,.04); }
+        .pin-reset-panel [hidden] { display: none !important; }
+        .pin-reset-message { min-height: 1.4em; margin-bottom: 12px; color: #53645c; font-size: .85rem; }
+        .pin-reset-message.error { color: #b42318; }
+        .pin-reset-secondary { margin: 8px 0 0; padding: 0; border: 0; background: none; color: #287d72; font: inherit; text-decoration: underline; cursor: pointer; }
+        .pin-reset-actions { display: flex; flex-wrap: wrap; gap: 10px; align-items: center; }
+                .pin-reset-link { display: inline-block; margin: -8px 0 18px; padding: 0; border: 0; background: none; color: #287d72; font: inherit; text-decoration: underline; cursor: pointer; }
+                .pin-reset-panel { margin: 2px 0 20px; padding: 16px; border: 1px solid #cfd8d2; border-radius: 4px; background: rgba(40,125,114,.04); }
+                .pin-reset-panel [hidden] { display: none !important; }
+                .pin-reset-message { min-height: 1.4em; margin-bottom: 12px; color: #53645c; font-size: .85rem; }
+                .pin-reset-message.error { color: #b42318; }
+                .pin-reset-secondary { margin: 8px 0 0; padding: 0; border: 0; background: none; color: #287d72; font: inherit; text-decoration: underline; cursor: pointer; }
+                .pin-reset-actions { display: flex; flex-wrap: wrap; gap: 10px; align-items: center; }
+            .how-works-box { margin: 0; padding: 18px; background: #fffdf8; border: 1px solid #d9dfd9; border-top: 4px solid #e0a52f; border-radius: 4px; box-shadow: 0 8px 22px rgba(23,34,31,.06); }
         .how-works-box h3 { margin: 0 0 12px; color: #17221f; font: 700 1.08rem Georgia, 'Times New Roman', serif; }
         .how-works-box ol { display: grid; gap: 5px; margin: 0; padding-left: 20px; color: #53645c; font-size: .82rem; line-height: 1.45; }
         .guidance-action { width: 100%; margin-top: 16px; padding: 10px 12px; border: 1px solid #287d72; border-radius: 4px; background: #e3f0eb; color: #287d72; font: 700 .78rem 'Trebuchet MS', 'Segoe UI', sans-serif; cursor: pointer; text-align: left; }
@@ -604,6 +620,10 @@
         #applyBtn:disabled { background: #aab9b3; color: #eef3ef; box-shadow: none; cursor: not-allowed; opacity: 1; }
         .register-card .form-group select { width: 100%; padding: 12px 16px; border: 1px solid #cfd8d2; border-radius: 4px; background: #f7f8f4; color: #17221f; font: inherit; outline: none; }
         .register-card .form-group select:focus { border-color: #287d72; box-shadow: 0 0 0 3px rgba(40,125,114,.12); }
+        .upload-status { margin-top: 7px; color: #65736d; font-size: .78rem; line-height: 1.45; }
+        .upload-status.error { color: #c65a4c; }
+        .upload-status.success { color: #27945e; }
+        .upload-retry { width: auto; margin: 8px 0 0; padding: 8px 12px; font-size: .8rem; }
         .consent-row { display: flex; gap: 10px; align-items: flex-start; margin: 4px 0 10px; color: #53645c; font-size: .79rem; line-height: 1.45; }
         .consent-row input { width: 17px; height: 17px; flex: 0 0 auto; margin-top: 1px; accent-color: #287d72; }
         .register-card .btn:disabled { background: #aab9b3; color: #eef3ef; box-shadow: none; cursor: not-allowed; opacity: 1; }
@@ -846,6 +866,7 @@
                     <h3><span aria-hidden="true">!</span>Before You Begin</h3>
                     <ul>
                         <li>You must have a valid 12-digit Aadhaar ID</li>
+                        <li>Keep your Aadhaar Offline e-KYC ZIP (downloaded within the last 72 hours) and the 4-digit share code you set for it</li>
                         <li>Your name and date of birth must match your Aadhaar records exactly</li>
                         <li>This process cannot be undone once submitted, since blockchain records are immutable</li>
                     </ul>
@@ -854,6 +875,7 @@
                     <h3 id="howWorksTitle">How this works</h3>
                     <ol>
                         <li>Enter your name, DOB and Aadhaar ID</li>
+                        <li>Upload the Offline e-KYC ZIP and enter its share code</li>
                         <li>Review your details and give consent</li>
                         <li>Click Submit Registration</li>
                         <li>Wait a few seconds for confirmation</li>
@@ -881,6 +903,17 @@
                 <input type="password" id="regPin" inputmode="numeric" pattern="[0-9]{4}" maxlength="4" autocomplete="new-password" placeholder="4-digit PIN" />
             </div>
             <div class="form-group">
+                <label for="regEkycZip">Aadhaar Offline e-KYC ZIP <span aria-hidden="true">*</span></label>
+                <input type="file" id="regEkycZip" accept=".zip,application/zip" required aria-describedby="regEkycHint regDocumentStatus" onchange="selectEkycZip(this)" />
+                <div class="form-hint" id="regEkycHint">Download it from the UIDAI portal (Offline e-KYC). ZIP only; maximum 5 MB.</div>
+                <div class="upload-status" id="regDocumentStatus" role="status" aria-live="polite">No file selected.</div>
+            </div>
+            <div class="form-group">
+                <label for="regShareCode">Share code <span aria-hidden="true">*</span></label>
+                <input type="password" id="regShareCode" inputmode="numeric" pattern="[0-9]{4}" maxlength="4" autocomplete="off" required placeholder="4-digit share code" />
+                <div class="form-hint">The 4-digit code you set when you downloaded the ZIP. It is used once to open the file and is never stored or logged.</div>
+            </div>
+            <div class="form-group">
                 <label for="regGender">Gender</label>
                 <select id="regGender">
                     <option value="">Select gender</option>
@@ -892,7 +925,7 @@
             <div class="form-group">
                 <label for="regMobile">Mobile Number</label>
                 <input type="text" id="regMobile" placeholder="e.g. 9876543210" />
-                <div class="form-hint">Format: 10 digits</div>
+                <div class="form-hint">Use 10 digits or an international number with country code.</div>
             </div>
             <label class="consent-row" for="regConsent">
                 <input type="checkbox" id="regConsent" />
@@ -944,8 +977,46 @@
                 <div class="form-hint" id="appHint">Format: 4 digits-4 digits-4 digits</div>
             </div>
             <div class="form-group">
-                <label for="appPin">Registered 4-digit PIN</label>
+                <label for="appPin">PIN</label>
                 <input type="password" id="appPin" inputmode="numeric" pattern="[0-9]{4}" maxlength="4" autocomplete="off" placeholder="Enter your registration PIN" />
+            </div>
+            <button type="button" class="pin-reset-link" onclick="openPinReset()">Forgot PIN?</button>
+            <div class="pin-reset-panel" id="pinResetPanel" hidden>
+                <div class="pin-reset-message" id="pinResetMessage" role="status" aria-live="polite"></div>
+                <div id="pinResetRequestStep">
+                    <div class="form-group">
+                        <label for="pinResetEmail">Registered email address</label>
+                        <input type="email" id="pinResetEmail" autocomplete="email" placeholder="name@example.com" />
+                    </div>
+                    <button type="button" class="btn" id="pinResetRequestButton" onclick="requestPinResetOtp()">Send OTP</button>
+                </div>
+                <div id="pinResetOtpStep" hidden>
+                    <p>Enter the OTP sent to your email address</p>
+                    <div class="form-group">
+                        <label for="pinResetOtp">One-time password</label>
+                        <input type="text" id="pinResetOtp" inputmode="numeric" pattern="[0-9]{6}" maxlength="6" autocomplete="one-time-code" placeholder="6-digit OTP" />
+                    </div>
+                    <div class="pin-reset-actions">
+                        <button type="button" class="btn" id="pinResetVerifyButton" onclick="verifyPinResetOtp()">Verify OTP</button>
+                        <button type="button" class="pin-reset-secondary" id="pinResetResendButton" onclick="resendPinResetOtp()" disabled>Resend OTP in 60s</button>
+                    </div>
+                </div>
+                <div id="pinResetNewPinStep" hidden>
+                    <div class="form-group">
+                        <label for="pinResetNewPin">New PIN</label>
+                        <input type="password" id="pinResetNewPin" inputmode="numeric" pattern="[0-9]{4}" maxlength="4" autocomplete="new-password" placeholder="Enter new 4-digit PIN" />
+                    </div>
+                    <div class="form-group">
+                        <label for="pinResetConfirmPin">Confirm New PIN</label>
+                        <input type="password" id="pinResetConfirmPin" inputmode="numeric" pattern="[0-9]{4}" maxlength="4" autocomplete="new-password" placeholder="Confirm new 4-digit PIN" />
+                    </div>
+                    <button type="button" class="btn" id="pinResetCompleteButton" onclick="completePinReset()">Reset PIN</button>
+                </div>
+                <div id="pinResetSuccessStep" hidden>
+                    <p>PIN reset successfully.</p>
+                    <button type="button" class="btn" onclick="hidePinReset(); document.getElementById('appPin').focus();">Return to Passport Apply</button>
+                </div>
+                <button type="button" class="pin-reset-secondary" id="pinResetCancelButton" onclick="hidePinReset()">Cancel</button>
             </div>
             <section class="identity-check" aria-labelledby="identityCheckTitle">
                 <h3 id="identityCheckTitle">Verify your identity</h3>
@@ -998,7 +1069,7 @@
             <form class="progress-form" id="progressForm">
                 <div class="form-group">
                     <label for="progressAadhaar">Aadhaar ID</label>
-                    <input type="text" id="progressAadhaar" placeholder="e.g. 1111-2222-3333" autocomplete="off" />
+                    <input type="text" id="progressAadhaar" placeholder="e.g. 1111 2222 3333" autocomplete="off" />
                     <div class="form-hint" id="progressHint">Format: 4 digits-4 digits-4 digits</div>
                 </div>
                 <button type="submit" class="btn">Check progress</button>
@@ -1021,11 +1092,15 @@
 
 <script>
     const API = `${window.location.protocol}//${window.location.hostname || "127.0.0.1"}:5000`;
+    const MAX_EKYC_ZIP_BYTES = 5 * 1024 * 1024;
     const textSizeKey = "passport-ui-text-size";
     let textSize = Number(localStorage.getItem(textSizeKey)) || 100;
     let applicationIdentityVerified = false;
+    let applicationChallenge = null;
     let rejectedApplicationAttempt = null;
     let currentUser = null;
+    let pinResetFlowId = null;
+    let pinResetResendInterval = null;
 
     function apiFetch(path, options = {}) {
         return fetch(`${API}${path}`, { ...options, credentials: "include" });
@@ -1055,7 +1130,7 @@
             accountButton.setAttribute("aria-expanded", "false");
         }
         if (role) {
-            const roleLabel = role === "developer" ? "Developer" : "Applicant";
+            const roleLabel = role === "developer" ? "Admin" : "Applicant";
             accountButton.title = `${roleLabel} account`;
             accountUsername.textContent = currentUser.name || currentUser.username || "Signed-in account";
             accountRole.textContent = `${roleLabel} account`;
@@ -1073,7 +1148,7 @@
         if (!card) return;
         const back = step === "role" ? "" : '<a class="auth-back" href="#auth" onclick="renderAuthStep(\'role\'); return false;">← Choose another role</a>';
         const screens = {
-            role: `${back}<h2>Who are you?</h2><p>Select the option that best describes how you will use IdentiGate.</p><div class="auth-role-grid"><button class="auth-role" type="button" onclick="openRoleAuth('applicant')"><strong>Applicant</strong><span>Apply for a passport and follow your application status.</span></button><button class="auth-role" type="button" onclick="openRoleAuth('developer')"><strong>Developer</strong><span>Review registered citizens and passport applications.</span></button></div>`
+            role: `${back}<h2>Who are you?</h2><p>Select the option that best describes how you will use IdentiGate.</p><div class="auth-role-grid"><button class="auth-role" type="button" onclick="openRoleAuth('applicant')"><strong>Applicant</strong><span>Apply for a passport and follow your application status.</span></button><button class="auth-role" type="button" onclick="openRoleAuth('developer')"><strong>Admin</strong><span>Review registered citizens and passport applications.</span></button></div>`
         };
         card.innerHTML = screens[step] || screens.role;
     }
@@ -1081,7 +1156,7 @@
     function openRoleAuth(role, mode) {
         const isDeveloper = role === "developer";
         const authMode = isDeveloper ? "login" : (mode || "signup");
-        const heading = isDeveloper ? "Developer sign in" : (authMode === "signup" ? "Create applicant account" : "Applicant sign in");
+        const heading = isDeveloper ? "Admin sign in" : (authMode === "signup" ? "Create applicant account" : "Applicant sign in");
         const description = isDeveloper
             ? "Sign in with an authorized team USN and provisioned password."
             : (authMode === "signup" ? "Create an account with your name, email, and password." : "Enter your email and password to continue.");
@@ -1095,7 +1170,7 @@
         const submitPath = isDeveloper ? "developer/login" : `applicant/${authMode}`;
         const toggle = !isDeveloper
             ? `<div class="auth-note">${authMode === "signup" ? 'Already have an account? <button class="auth-link" type="button" onclick="openRoleAuth(\'applicant\', \'login\')">Sign in</button>' : 'New to IdentiGate? <button class="auth-link" type="button" onclick="openRoleAuth(\'applicant\', \'signup\')">Create an account</button>'}</div>`
-            : '<div class="auth-note">Developer accounts are created by the team administrator for authorized USNs.</div>';
+            : '<div class="auth-note">Admin accounts are created by the team administrator for authorized USNs.</div>';
         document.getElementById("authCard").innerHTML = `${back}<h2>${heading}</h2><p>${description}</p><form class="auth-form" onsubmit="submitAuth(event, '${submitPath}')">${nameField}${identifier}<label>Password<input name="password" type="password" required minlength="8" autocomplete="${authMode === "signup" ? "new-password" : "current-password"}" placeholder="At least 8 characters" /></label><div class="auth-error" id="authError" role="alert"></div><button class="auth-submit" type="submit">${authMode === "signup" ? "Create account" : "Sign in"}</button></form>${toggle}`;
     }
 
@@ -1199,8 +1274,10 @@
     });
     applyTextSize();
     applyRoleAccess(null);
-    document.getElementById("regConsent").addEventListener("change", (event) => {
-        document.getElementById("regBtn").disabled = !event.target.checked;
+    document.getElementById("regConsent").addEventListener("change", updateRegistrationButton);
+    document.getElementById("regShareCode").addEventListener("input", (event) => {
+        event.target.value = event.target.value.replace(/\D/g, "").slice(0, 4);
+        updateRegistrationButton();
     });
     document.getElementById("progressForm").addEventListener("submit", fetchApplicantProgress);
     document.getElementById("progressAadhaar").addEventListener("input", (event) => {
@@ -1278,22 +1355,40 @@
 
     window.addEventListener("hashchange", activateTabFromUrl);
 
+    const VERHOEFF_D = [[0,1,2,3,4,5,6,7,8,9],[1,2,3,4,0,6,7,8,9,5],[2,3,4,0,1,7,8,9,5,6],[3,4,0,1,2,8,9,5,6,7],[4,0,1,2,3,9,5,6,7,8],[5,9,8,7,6,0,4,3,2,1],[6,5,9,8,7,1,0,4,3,2],[7,6,5,9,8,2,1,0,4,3],[8,7,6,5,9,3,2,1,0,4],[9,8,7,6,5,4,3,2,1,0]];
+    const VERHOEFF_P = [[0,1,2,3,4,5,6,7,8,9],[1,5,7,6,2,8,3,0,9,4],[5,8,0,3,7,9,6,1,4,2],[8,9,1,6,0,4,3,5,2,7],[9,4,5,3,1,2,6,8,7,0],[4,2,8,6,5,7,3,9,0,1],[2,7,9,3,8,0,6,4,1,5],[7,0,4,6,9,1,3,2,5,8]];
+
+    // 12 digits, first digit 2-9, Verhoeff checksum. Spaces/dashes are stripped.
+    // Returns the canonical XXXX-XXXX-XXXX form, or null when invalid.
+    function canonicalAadhaar(value) {
+        const text = String(value || "").trim();
+        if (!/^[0-9 -]+$/.test(text)) return null;
+        const digits = text.replace(/[ -]/g, "");
+        if (!/^[2-9]\d{11}$/.test(digits)) return null;
+        let checksum = 0;
+        [...digits].reverse().forEach((digit, index) => {
+            checksum = VERHOEFF_D[checksum][VERHOEFF_P[index % 8][Number(digit)]];
+        });
+        return checksum === 0 ? `${digits.slice(0, 4)}-${digits.slice(4, 8)}-${digits.slice(8)}` : null;
+    }
+
     function checkAadhaarFormat(input, hintId) {
         const val = input.value.trim();
         const hint = document.getElementById(hintId);
-        const regex = /^\d{4}-\d{4}-\d{4}$/;
-        if (regex.test(val)) {
+        if (canonicalAadhaar(val)) {
             input.className = "valid";
             hint.className = "form-hint ok";
-            hint.textContent = "✔ Valid format";
+            hint.textContent = "✔ Valid Aadhaar number";
         } else if (val.length > 0) {
             input.className = "invalid";
             hint.className = "form-hint bad";
-            hint.textContent = "✘ Expected format: 1111-2222-3333";
+            hint.textContent = "✘ Enter a valid 12-digit Aadhaar number (first digit 2-9)";
         } else {
             input.className = "";
             hint.className = "form-hint";
-            hint.textContent = "Format: 4 digits-4 digits-4 digits";
+            hint.textContent = hintId === "progressHint"
+                ? "Format: 4 digits 4 digits 4 digits"
+                : "Format: 4 digits-4 digits-4 digits";
         }
     }
 
@@ -1334,12 +1429,13 @@
 
     async function fetchApplicantProgress(event) {
         event.preventDefault();
-        const aadhaar = document.getElementById("progressAadhaar").value.trim();
+        // Accept "5613 6248 6062" (or dashed); the backend stores the dashed form.
+        const aadhaar = canonicalAadhaar(document.getElementById("progressAadhaar").value);
         const hint = document.getElementById("progressHint");
         const result = document.getElementById("progressResult");
-        if (!/^\d{4}-\d{4}-\d{4}$/.test(aadhaar)) {
+        if (!aadhaar) {
             hint.className = "form-hint bad";
-            hint.textContent = "Enter the Aadhaar ID in 1111-2222-3333 format.";
+            hint.textContent = "Enter the Aadhaar ID in 1111 2222 3333 format.";
             result.innerHTML = `<div class="empty-state"><div class="icon">!</div><div class="msg">A valid Aadhaar ID is required.</div></div>`;
             return;
         }
@@ -1399,49 +1495,331 @@
         }
     }
 
+    let registrationInFlight = false;
+
+    function ekycZipFile() {
+        return document.getElementById("regEkycZip").files?.[0];
+    }
+
+    // Submit is enabled only with a ZIP, a 4-digit share code and consent, and never
+    // while a request is in flight.
+    function updateRegistrationButton() {
+        const ready = Boolean(ekycZipFile())
+            && /^\d{4}$/.test(document.getElementById("regShareCode").value)
+            && document.getElementById("regConsent").checked
+            && !registrationInFlight;
+        document.getElementById("regBtn").disabled = !ready;
+    }
+
+    function selectEkycZip(input) {
+        const file = input.files?.[0];
+        const status = document.getElementById("regDocumentStatus");
+        status.className = "upload-status";
+        if (!file) {
+            status.textContent = "No file selected.";
+        } else if (!file.name.toLowerCase().endsWith(".zip")) {
+            input.value = "";
+            status.className = "upload-status error";
+            status.textContent = "Select the Aadhaar Offline e-KYC ZIP file (.zip).";
+        } else if (file.size <= 0 || file.size > MAX_EKYC_ZIP_BYTES) {
+            input.value = "";
+            status.className = "upload-status error";
+            status.textContent = "The ZIP file is empty or larger than 5 MB.";
+        } else {
+            status.className = "upload-status success";
+            status.textContent = `${file.name} selected. Enter the 4-digit share code.`;
+        }
+        updateRegistrationButton();
+    }
+
     async function registerCitizen() {
+        if (registrationInFlight) return;
         const name = document.getElementById("regName").value.trim();
         const dob = document.getElementById("regDob").value.trim();
         const aadhaar = document.getElementById("regAadhaar").value.trim();
         const pin = document.getElementById("regPin").value;
+        const mobile = document.getElementById("regMobile").value.trim();
+        const gender = document.getElementById("regGender").value;
+        const zipFile = ekycZipFile();
+        const shareCodeInput = document.getElementById("regShareCode");
+        const status = document.getElementById("regDocumentStatus");
         const btn = document.getElementById("regBtn");
         const resBox = document.getElementById("regResult");
 
-        if (!name || !dob || !aadhaar || !/^\d{4}$/.test(pin)) {
-            alert("Please fill in all fields and set a 4-digit PIN.");
+        if (!name || !dob || !aadhaar || !gender || !mobile || !/^\d{4}$/.test(pin)) {
+            alert("Please fill in all fields, including gender and a registered mobile number, and set a 4-digit PIN.");
             return;
         }
-        btn.disabled = true;
-        btn.textContent = "Processing Transaction...";
+        if (!canonicalAadhaar(aadhaar)) {
+            checkAadhaarFormat(document.getElementById("regAadhaar"), "regHint");
+            return;
+        }
+        if (!zipFile) {
+            status.className = "upload-status error";
+            status.textContent = "Select the Aadhaar Offline e-KYC ZIP file before continuing.";
+            return;
+        }
+        if (!/^\d{4}$/.test(shareCodeInput.value)) {
+            status.className = "upload-status error";
+            status.textContent = "Enter the 4-digit share code you set when downloading the ZIP.";
+            return;
+        }
+
+        registrationInFlight = true;
+        updateRegistrationButton();
+        btn.textContent = "Verifying signed file and registering...";
+        status.className = "upload-status";
+        status.textContent = `${zipFile.name}: verifying the signed Offline e-KYC file…`;
 
         try {
+            const form = new FormData();
+            form.append("name", name);
+            form.append("dob", dob);
+            form.append("aadhaar_id", canonicalAadhaar(aadhaar));
+            form.append("pin", pin);
+            form.append("mobile", mobile);
+            form.append("gender", gender);
+            form.append("verification_method", "offline_xml");
+            form.append("ekyc_zip", zipFile, zipFile.name);
+            form.append("share_code", shareCodeInput.value);
+            shareCodeInput.value = "";  // the code is never kept after it is handed to the request
             const res = await apiFetch(`/aadhaar/register`, {
                 method: "POST",
-                headers: { "Content-Type": "application/json" },
-                body: JSON.stringify({ name, dob, aadhaar_id: aadhaar, pin })
+                body: form
             });
             const data = await res.json();
-            resBox.className = "result show " + (res.ok ? "success" : "error");
-            
-            if (res.ok) {
-                document.getElementById("regTitle").textContent = "✅ Citizen Successfully Registered";
+            const registered = res.ok && data.success === true;
+            resBox.className = "result show " + (registered ? "success" : (data.result === "pending" ? "info" : "error"));
+            const fieldLabels = {
+                name: "Name match",
+                dob: "DOB match",
+                gender: "Gender match",
+                aadhaar_id: "Aadhaar number match"
+            };
+            const renderChecks = checks => {
+                if (!checks) return "";
+                const text = {
+                    zip: { OPENED: "Opened with the share code", FAILED: "Could not be opened" },
+                    signature: { VERIFIED: "Valid (pinned UIDAI certificate)", FAILED: "Not valid" },
+                    freshness: { OK: "Within the allowed age", FAILED: "Outside the allowed age" }
+                };
+                const rows = [
+                    ["ZIP and share code", text.zip[checks.zip]],
+                    ["UIDAI signature", text.signature[checks.signature]],
+                    ["Freshness", text.freshness[checks.freshness]]
+                ].map(([label, value]) => [label, value || "Not checked"]);
+                return `<div class="processing-status">${rows.map(([label, value]) =>
+                    `<div class="result-row"><span class="key">${escapeHtml(label)}</span><span class="val">${escapeHtml(value)}</span></div>`
+                ).join("")}</div>`;
+            };
+            const renderFieldResults = results => {
+                if (!results || !Object.keys(results).length) return "";
+                return `<div class="verification-fields">${Object.entries(fieldLabels).map(([field, label]) => {
+                    const result = results[field] || "REVIEW_REQUIRED";
+                    const description = result === "MATCH"
+                        ? "Match"
+                        : (result === "NO_MATCH" ? "Does not match" : "Requires review");
+                    return `<div class="result-row"><span class="key">${label}</span><span class="val">${description}</span></div>`;
+                }).join("")}</div>`;
+            };
+
+            if (registered) {
+                document.getElementById("regTitle").textContent = data.message || "Details verified successfully.";
                 document.getElementById("regDetails").innerHTML = `
-                    <div class="result-row"><span class="key">Citizen Name</span><span class="val">${name}</span></div>
-                    <div class="result-row"><span class="key">Aadhaar ID</span><span class="val">${aadhaar}</span></div>
-                    <div class="tx-box"><div class="tx-label">Transaction Hash</div>${data.transaction_hash || '0x...'}</div>
+                    ${renderChecks(data.processing_status)}
+                    ${renderFieldResults(data.field_results)}
+                    <div class="result-row"><span class="key">Citizen Name</span><span class="val">${escapeHtml(name)}</span></div>
+                    <div class="result-row"><span class="key">Aadhaar ID</span><span class="val">${escapeHtml(aadhaar)}</span></div>
+                    <div class="tx-box"><div class="tx-label">Transaction Hash</div>${escapeHtml(data.transaction_hash || "0x...")}</div>
+                    ${data.limitation ? `<div class="form-hint">${escapeHtml(data.limitation)}</div>` : ""}
                 `;
+                status.className = "upload-status success";
+                status.textContent = `${zipFile.name}: ${data.message || "details verified successfully."}`;
                 pushActivityToast(`Registered citizen ${name}`, data.transaction_hash);
             } else {
-                document.getElementById("regTitle").textContent = "❌ Registration Failed";
-                document.getElementById("regDetails").innerHTML = `<div style="color:#f87171">${data.error || 'Unknown error'}</div>`;
+                const reasons = Object.values(data.reason_codes || {}).filter(code => code !== "OK");
+                document.getElementById("regTitle").textContent = data.result === "verified"
+                    ? "ℹ️ Already registered (details verified, nothing recorded)"
+                    : (data.result === "pending"
+                        ? "⏳ Registration Pending Review (nothing recorded)"
+                        : `❌ Registration ${data.result === "rejected" ? "Rejected" : "Failed"}${reasons.length ? ` (${reasons.join(", ")})` : ""}`);
+                document.getElementById("regDetails").innerHTML =
+                    `${renderChecks(data.processing_status)}<div>${escapeHtml(data.error || "Registration could not be completed.")}</div>${data.review_message ? `<div class="form-hint">${escapeHtml(data.review_message)}</div>` : ""}${renderFieldResults(data.field_results)}`;
+                status.className = "upload-status error";
+                status.textContent = `${zipFile.name}: ${data.error || "The file could not be verified."}`;
             }
         } catch(err) {
             resBox.className = "result show error";
             document.getElementById("regTitle").textContent = "❌ Network Error";
-            document.getElementById("regDetails").innerHTML = `<div style="color:#f87171">Could not connect to middleware server.</div>`;
+            document.getElementById("regDetails").textContent = "Could not connect to middleware server.";
+            status.className = "upload-status error";
+            status.textContent = `${zipFile.name}: the request could not be completed. You can try again.`;
         } finally {
-            btn.disabled = !document.getElementById("regConsent").checked;
+            registrationInFlight = false;
+            shareCodeInput.value = "";
             btn.textContent = "Submit Registration";
+            updateRegistrationButton();
+        }
+    }
+
+    function setPinResetStep(step) {
+        for (const name of ["Request", "Otp", "NewPin", "Success"]) {
+            document.getElementById(`pinReset${name}Step`).hidden = name !== step;
+        }
+        document.getElementById("pinResetCancelButton").hidden = step === "Success";
+    }
+
+    function setPinResetMessage(message, isError = false) {
+        const messageBox = document.getElementById("pinResetMessage");
+        messageBox.textContent = message;
+        messageBox.classList.toggle("error", isError);
+    }
+
+    function openPinReset() {
+        pinResetFlowId = null;
+        clearInterval(pinResetResendInterval);
+        document.getElementById("pinResetPanel").hidden = false;
+        document.getElementById("pinResetEmail").value = "";
+        document.getElementById("pinResetOtp").value = "";
+        document.getElementById("pinResetNewPin").value = "";
+        document.getElementById("pinResetConfirmPin").value = "";
+        setPinResetMessage("");
+        setPinResetStep("Request");
+        document.getElementById("pinResetEmail").focus();
+    }
+
+    function hidePinReset() {
+        clearInterval(pinResetResendInterval);
+        pinResetFlowId = null;
+        document.getElementById("pinResetOtp").value = "";
+        document.getElementById("pinResetNewPin").value = "";
+        document.getElementById("pinResetConfirmPin").value = "";
+        document.getElementById("pinResetPanel").hidden = true;
+    }
+
+    function startPinResetResendCountdown() {
+        clearInterval(pinResetResendInterval);
+        const button = document.getElementById("pinResetResendButton");
+        let secondsRemaining = 60;
+        button.disabled = true;
+        button.textContent = `Resend OTP in ${secondsRemaining}s`;
+        pinResetResendInterval = setInterval(() => {
+            secondsRemaining -= 1;
+            button.disabled = secondsRemaining > 0;
+            button.textContent = secondsRemaining > 0 ? `Resend OTP in ${secondsRemaining}s` : "Resend OTP";
+            if (secondsRemaining <= 0) clearInterval(pinResetResendInterval);
+        }, 1000);
+    }
+
+    async function requestPinResetOtp() {
+        const email = document.getElementById("pinResetEmail").value.trim();
+        if (!email) {
+            setPinResetMessage("Enter your registered email address.", true);
+            return;
+        }
+        const button = document.getElementById("pinResetRequestButton");
+        button.disabled = true;
+        setPinResetMessage("");
+        try {
+            const response = await apiFetch("/pin-reset/request", {
+                method: "POST",
+                headers: { "Content-Type": "application/json" },
+                body: JSON.stringify({ email })
+            });
+            const data = await response.json();
+            if (!response.ok) throw new Error(data.error || "Could not request an OTP.");
+            pinResetFlowId = data.flow_id;
+            setPinResetStep("Otp");
+            setPinResetMessage(data.message || "If the email matches a registered applicant, an OTP has been sent.");
+            startPinResetResendCountdown();
+            document.getElementById("pinResetOtp").focus();
+        } catch (error) {
+            setPinResetMessage(error.message, true);
+        } finally {
+            button.disabled = false;
+        }
+    }
+
+    async function resendPinResetOtp() {
+        const button = document.getElementById("pinResetResendButton");
+        button.disabled = true;
+        try {
+            const response = await apiFetch("/pin-reset/resend", {
+                method: "POST",
+                headers: { "Content-Type": "application/json" },
+                body: JSON.stringify({ flow_id: pinResetFlowId })
+            });
+            const data = await response.json();
+            if (!response.ok) throw new Error(data.error || "Could not resend the OTP.");
+            setPinResetMessage(data.message || "If the request is valid, a new OTP has been sent.");
+            startPinResetResendCountdown();
+        } catch (error) {
+            setPinResetMessage(error.message, true);
+            button.disabled = false;
+        }
+    }
+
+    async function verifyPinResetOtp() {
+        const otp = document.getElementById("pinResetOtp").value.trim();
+        if (!/^\d{6}$/.test(otp)) {
+            setPinResetMessage("Enter the 6-digit OTP.", true);
+            return;
+        }
+        const button = document.getElementById("pinResetVerifyButton");
+        button.disabled = true;
+        setPinResetMessage("");
+        try {
+            const response = await apiFetch("/pin-reset/verify", {
+                method: "POST",
+                headers: { "Content-Type": "application/json" },
+                body: JSON.stringify({ flow_id: pinResetFlowId, otp })
+            });
+            const data = await response.json();
+            if (!response.ok) throw new Error(data.error || "OTP verification failed.");
+            clearInterval(pinResetResendInterval);
+            document.getElementById("pinResetOtp").value = "";
+            setPinResetStep("NewPin");
+            setPinResetMessage("");
+            document.getElementById("pinResetNewPin").focus();
+        } catch (error) {
+            setPinResetMessage(error.message, true);
+        } finally {
+            button.disabled = false;
+        }
+    }
+
+    async function completePinReset() {
+        const pin = document.getElementById("pinResetNewPin").value;
+        const confirmation = document.getElementById("pinResetConfirmPin").value;
+        if (!/^\d{4}$/.test(pin)) {
+            setPinResetMessage("New PIN must be exactly 4 digits.", true);
+            return;
+        }
+        if (pin !== confirmation) {
+            setPinResetMessage("The PINs do not match.", true);
+            return;
+        }
+        const button = document.getElementById("pinResetCompleteButton");
+        button.disabled = true;
+        setPinResetMessage("");
+        try {
+            const response = await apiFetch("/pin-reset/complete", {
+                method: "POST",
+                headers: { "Content-Type": "application/json" },
+                body: JSON.stringify({ flow_id: pinResetFlowId, new_pin: pin })
+            });
+            const data = await response.json();
+            if (!response.ok) throw new Error(data.error || "Could not reset the PIN.");
+            clearInterval(pinResetResendInterval);
+            pinResetFlowId = null;
+            document.getElementById("pinResetNewPin").value = "";
+            document.getElementById("pinResetConfirmPin").value = "";
+            setPinResetStep("Success");
+            setPinResetMessage("");
+        } catch (error) {
+            setPinResetMessage(error.message, true);
+        } finally {
+            button.disabled = false;
         }
     }
 
@@ -1452,8 +1830,8 @@
         const btn = document.getElementById("applyBtn");
         const resBox = document.getElementById("applyResult");
 
-        if (!name || !aadhaar || !/^\d{4}$/.test(pin)) {
-            alert("Please enter your name, Aadhaar ID, and registered 4-digit PIN.");
+        if (!name || !canonicalAadhaar(aadhaar) || !/^\d{4}$/.test(pin)) {
+            alert("Please enter your name, a valid Aadhaar number, and registered 4-digit PIN.");
             return;
         }
         if (!applicationIdentityVerified) {
@@ -1468,8 +1846,10 @@
             const res = await apiFetch(`/passport/apply`, {
                 method: "POST",
                 headers: { "Content-Type": "application/json" },
-                body: JSON.stringify({ name, aadhaar_id: aadhaar, pin })
+                body: JSON.stringify({ name, aadhaar_id: canonicalAadhaar(aadhaar), pin, ...(applicationChallenge || {}) })
             });
+            applicationChallenge = null;
+            applicationIdentityVerified = false;
             const data = await res.json();
             resBox.className = "result show " + (res.ok ? "success" : "error");
 
@@ -1504,8 +1884,10 @@
         const verifyBtn = document.getElementById("verifyApplicationBtn");
         const status = document.getElementById("applicationIdentityStatus");
 
-        if (!name || !/^\d{4}-\d{4}-\d{4}$/.test(aadhaar) || !/^\d{4}$/.test(pin)) {
+        const canonical = canonicalAadhaar(aadhaar);
+        if (!name || !canonical || !/^\d{4}$/.test(pin)) {
             applicationIdentityVerified = false;
+            applicationChallenge = null;
             document.getElementById("applyBtn").disabled = true;
             status.className = "identity-status error";
             status.textContent = "Enter your registered name, valid Aadhaar ID, and 4-digit PIN before verifying your identity.";
@@ -1519,30 +1901,14 @@
         document.getElementById("applicationIdentityDetails").className = "identity-proof-details";
         document.getElementById("applicationIdentityDetails").innerHTML = "";
         try {
-            const res = await apiFetch(`/aadhaar/verify/${encodeURIComponent(aadhaar)}`, {
+            const res = await apiFetch(`/aadhaar/verify/${encodeURIComponent(canonical)}`, {
                 method: "POST",
                 headers: { "Content-Type": "application/json" },
                 body: JSON.stringify({ name, pin })
             });
             const data = await res.json();
             if (!res.ok || !data.authenticated) {
-                if (res.status === 401 || res.status === 404) {
-                    const failureReason = data.error || "Identity could not be authenticated.";
-                    try {
-                        const outcome = await recordRejectedPassportApplication(name, aadhaar, pin, failureReason);
-                        if (outcome === "already-approved") {
-                            status.className = "identity-status error";
-                            status.textContent = "This Aadhaar ID already has an approved passport application. You cannot apply again.";
-                            return;
-                        }
-                        status.className = "identity-status error";
-                        status.textContent = `${failureReason} This application was recorded as rejected.`;
-                    } catch (recordError) {
-                        status.className = "identity-status error";
-                        status.textContent = `${failureReason} The rejected application could not be recorded: ${recordError.message}`;
-                    }
-                    return;
-                }
+                // The server records nothing for a failed verification.
                 throw new Error(data.error || "Identity could not be authenticated. You cannot apply yet.");
             }
             if (data.already_applied) {
@@ -1552,6 +1918,7 @@
                 return;
             }
             applicationIdentityVerified = true;
+            applicationChallenge = { request_id: data.request_id, nonce: data.nonce };
             status.className = "identity-status success";
             status.textContent = "Identity authenticated. You can now submit your application.";
             const details = document.getElementById("applicationIdentityDetails");
