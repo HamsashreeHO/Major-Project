@@ -176,7 +176,7 @@ Make sure you have installed:
 ### Step 1 — Clone Repository
 
 ```bash
-git clone https://github.com/kusumitha08/cross-blockchain-passport.git
+git clone https://github.com/HamsashreeHO/Major-Project.git
 cd cross-blockchain-passport
 ```
 
