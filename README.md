@@ -65,8 +65,8 @@ Nonce state is intentionally kept in the middleware because it protects the shor
 ---
 
 ## 🏗️ System Architecture
- <img width="2962" height="2893" alt="archetecture1" src="https://github.<img width="950" height="509" alt="Picture1" src="https://github.com/user-attachments/assets/b0fa6999-9444-4865-b90b-73eb1b646009" />
-com/user-attachments/assets/e941a527-7bf4-4eb9-9d59-25e8ba7a7872" />
+ <img width="950" height="509" alt="Picture1" src="https://github.com/user-attachments/assets/b0fa6999-9444-4865-b90b-73eb1b646009" />
+
 
 ### Three Main Components
 
