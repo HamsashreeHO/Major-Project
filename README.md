@@ -22,6 +22,12 @@
 - [Installation](#installation)
 - [How to Run](#how-to-run)
 - [API Endpoints](#api-endpoints)
+- [Security Properties](#security-properties)
+- [Cross-Blockchain Verification Flow](#cross-blockchain-verification-flow)
+- [Sample Test Data](#sample-test-data)
+- [Future Work](#future-work)
+- [References](#references)
+
 
 ---
 
@@ -81,9 +87,12 @@ Nonce state is intentionally kept in the middleware because it protects the shor
 ## 🔐 Algorithms Used
 
 ### Algorithm 1 — SHA-256 Based Identity Hashing
-Input  : Name + DOB + AadhaarID
-Process: SHA-256 cryptographic hash function
-Output : 256-bit identity hash H
+
+```
+Input   : Name + DOB + AadhaarID
+Process : SHA-256 cryptographic hash function
+Output  : 256-bit identity hash H
+```
 
 Properties:
 - One-way function — cannot reverse hash
@@ -94,21 +103,26 @@ Properties:
 ### Algorithm 2 — ECDSA Based Cross-Blockchain Verification
 
 **Signing (Aadhaar Side):**
+
+```
 Input  : Hash H, Private Key PrivA
-- Step 1 : Generate random k
-- Step 2 : R = k · G (elliptic curve point)
-- Step 3 : r = x-coordinate of R
-- Step 4 : s = k⁻¹(H + r · PrivA) mod n
-- Output : Signature (r, s)
+Step 1 : Generate random k
+Step 2 : R = k · G (elliptic curve point)
+Step 3 : r = x-coordinate of R
+Step 4 : s = k⁻¹(H + r · PrivA) mod n
+Output : Signature (r, s)
+```
 
 **Verification (Passport Side):**
-Input  : Hash H, Signature (r,s), Public Key PubA
-- Step 1 : w  = s⁻¹ mod n
-- Step 2 : u1 = H · w mod n
-- Step 3 : u2 = r · w mod n
-- Step 4 : P  = u1·G + u2·PubA
-- Check  : x-coordinate of P = r → ACCEPT
-else → REJECT
+
+```
+Input  : Hash H, Signature (r, s), Public Key PubA
+Step 1 : w  = s⁻¹ mod n
+Step 2 : u1 = H · w mod n
+Step 3 : u2 = r · w mod n
+Step 4 : P  = u1·G + u2·PubA
+Check  : x-coordinate of P = r → ACCEPT, else → REJECT
+```
 
 ---
 
@@ -116,7 +130,7 @@ else → REJECT
 
 | Technology | Version | Purpose |
 |---|---|---|
-| Python | 3.9 | Primary backend language |
+| Python | 3.9+ | Primary backend language |
 | SHA-256 (hashlib) | Built-in | Identity hashing |
 | ECDSA (ecdsa library) | Latest | Digital signatures |
 | Solidity | 0.8.19 | Smart contract language |
@@ -125,8 +139,11 @@ else → REJECT
 | web3.py | Latest | Blockchain interaction |
 | FastAPI | Latest | Middleware REST API |
 | Uvicorn | Latest | ASGI server |
+| PyMuPDF | Latest | e-Aadhaar PDF text extraction |
+| OpenCV | Latest | OCR image preprocessing |
+| Tesseract OCR (pytesseract) | Latest | Local OCR engine |
 | HTML/CSS/JavaScript | — | Frontend interface |
-| Node.js | 22.x | Runtime for Truffle and Ganache |
+| Node.js | 18+ | Runtime for Truffle and Ganache |
 
 ---
 
@@ -205,8 +222,9 @@ Make sure you have installed:
 
 ```bash
 git clone https://github.com/HamsashreeHO/Major-Project.git
-cd cross-blockchain-passport
+cd Major-Project
 ```
+
 
 ### Step 2 — Install Python Dependencies
 
@@ -289,6 +307,22 @@ Wait until you see:
 ✅ Connected to Ganache blockchain!
 Running on http://127.0.0.1:5000
 
+### Step 2 — Start the Middleware (Terminal 2)
+
+```bash
+python -m middleware.app
+```
+
+Wait until you see:
+```
+
+Wait until you see:
+
+```
+✅ Connected to Ganache blockchain!
+Running on http://127.0.0.1:5000
+
+
 ### Step 3 — Run Startup Script (Terminal 3)
 
 ```bash
@@ -316,10 +350,14 @@ The default SMTP server is `smtp.gmail.com` on port `587`. `SMTP_HOST` and `SMTP
 
 ### Step 4 — Restart the Middleware After start.py Asks
 
-Stop the middleware with Ctrl+C and restart the FastAPI module:
+Stop the middleware (Terminal 2) with Ctrl+C and restart it:
+
 ```bash
 python -m middleware.app
 ```
+
+Then return to Terminal 3 and press Enter so `start.py` can finish and launch the frontend. Applicants register their identities after creating an account in the portal.
+
 
 Then return to Terminal 3 and press Enter so `start.py` can finish and launch the frontend. Applicants register their identities after creating an account in the portal.
 
@@ -340,13 +378,19 @@ After setup finishes, `start.py` starts the frontend server and prints its URL (
 | POST | `/auth/developer/login` | Sign in with an authorized, provisioned developer USN |
 | GET | `/auth/session` | Check the current sign-in |
 | POST | `/auth/logout` | End the current sign-in |
+| POST | `/pin-reset/request` | Request a PIN-reset OTP by email |
+| POST | `/pin-reset/resend` | Resend the PIN-reset OTP |
+| POST | `/pin-reset/verify` | Verify the PIN-reset OTP |
+| POST | `/pin-reset/complete` | Set a new PIN after OTP verification |
 | POST | `/aadhaar/register` | Verify e-Aadhaar PDF password and demographic fields before Aadhaar blockchain registration |
 | GET | `/aadhaar/citizens` | View all registered citizens |
-| GET | `/aadhaar/proof/<aadhaar_id>` | Get identity proof from blockchain |
+| GET | `/aadhaar/proof/{aadhaar_id}` | Get identity proof from blockchain |
+| POST | `/aadhaar/verify/{aadhaar_id}` | Verify identity with name and PIN (issues a single-use nonce challenge) |
 | POST | `/passport/apply` | Apply for passport |
-| GET | `/passport/progress/<aadhaar_id>` | View an applicant's matching progress |
+| GET | `/passport/progress/{aadhaar_id}` | View an applicant's matching progress |
 | GET | `/passport/applications` | View all passport applications |
 | GET | `/passport/validate` | Validate blockchain stats |
+
 
 ### Example API Calls
 
@@ -405,7 +449,10 @@ GET http://localhost:5000/aadhaar/proof/1111-2222-3333
 
 ---
 
+
 ## 📊 Sample Test Data
+
+The startup script does not insert sample citizens. The values below are for manual testing only. Register them through the portal after creating an applicant account.
 
 | Name | DOB | Aadhaar ID |
 |---|---|---|
@@ -413,6 +460,7 @@ GET http://localhost:5000/aadhaar/proof/1111-2222-3333
 | Priya Sharma | 22-03-1990 | 2222-3333-4444 |
 | Arun Mehta | 08-11-1978 | 3333-4444-5555 |
 | Divya Nair | 30-07-1995 | 4444-5555-6666 |
+
 
 ---
 
