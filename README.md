@@ -133,35 +133,62 @@ else → REJECT
 ## 📁 Project Structure
 
 ```
-cross-blockchain-passport/
+Major-Project/
 |
 |-- contracts/
-|   |-- AadhaarRegistry.sol        (Aadhaar Blockchain smart contract)
-|   |-- PassportRegistry.sol       (Passport Blockchain smart contract)
+|   |-- AadharRegistry.sol          (Aadhaar Blockchain smart contract)
+|   |-- PassportRegistry.sol        (Passport Blockchain smart contract)
 |
 |-- migrations/
-|   |-- 2_deploy_contracts.js      (Contract deployment script)
+|   |-- 2_deploy_contract.js        (Contract deployment script)
 |
 |-- crypto_core/
-|   |-- crypto_utils.py            (SHA-256 + ECDSA implementation)
-|   |-- keys.py                    (Key management system)
-|   |-- contract_addresses.json    (Deployed contract addresses)
+|   |-- crypto_utils.py             (SHA-256 + ECDSA implementation)
+|   |-- keys.py                     (Key management system)
+|   |-- contract_addresses.json     (Deployed contract addresses)
 |
 |-- middleware/
-|   |-- app.py                     (FastAPI middleware)
-|   |-- document_upload.py         (Private upload staging and file validation)
-|   |-- aadhaar_qr.py              (QR detection without authenticity claims)
+|   |-- app.py                      (FastAPI middleware / API routes)
+|   |-- auth_store.py               (Applicant and developer account storage)
+|   |-- document_upload.py          (Private upload staging and file validation)
+|   |-- eaadhaar_pdf.py             (e-Aadhaar PDF extraction, OCR and field matching)
+|   |-- aadhaar_qr.py               (QR detection without authenticity claims)
+|   |-- aadhaar_secure_qr.py        (Aadhaar Secure QR verification)
+|   |-- aadhaar_ekyc_xml.py         (Offline eKYC XML parsing)
+|   |-- ekyc_check.py               (eKYC verification checks)
+|   |-- aadhaar_validation.py       (Aadhaar input validation)
+|   |-- pin_reset.py                (PIN reset with OTP)
+|   |-- email_service.py            (SMTP email delivery for OTPs)
+|   |-- sms_service.py              (SMS delivery service)
+|   |-- replay_protection.py        (Single-use nonce / replay protection)
+|   |-- verification_state.py       (Verification state tracking)
+|   |-- certificates/
+|       |-- uidai_offline_publickey_2026.cer   (UIDAI offline public key)
 |
 |-- frontend/
-|   |-- index.html                 (Web interface)
+|   |-- index.html                  (Web interface)
+|   |-- images/                     (Frontend images)
 |
 |-- test/
-|   |-- test_aadhaar_documents.py (Upload validation and QR detection tests)
-|   |-- test_aadhaar_registration_upload.py (Multipart registration fail-closed tests)
+|   |-- test_aadhaar_documents.py            (Upload validation and QR detection tests)
+|   |-- test_aadhaar_registration_upload.py  (Multipart registration fail-closed tests)
+|   |-- test_eaadhaar_pdf.py                 (e-Aadhaar PDF extraction tests)
+|   |-- test_ekyc_verification.py            (eKYC verification tests)
+|   |-- test_email_service.py                (Email service tests)
+|   |-- test_pin_reset.py                    (PIN reset tests)
+|   |-- test_replay_protection.py            (Replay protection tests)
+|   |-- test_secure_verification.py          (Secure QR verification tests)
+|   |-- ekyc_fixtures.py, qr_fixtures.py     (Test fixtures)
 |
-|-- start.py                       (Auto startup script)
-|-- truffle-config.js              (Truffle configuration)
-|-- README.md                      (Project documentation)
+|-- experiments/
+|   |-- aadhaar_qr_v0/              (Aadhaar QR experimental prototype)
+|
+|-- start.py                        (Auto startup script)
+|-- truffle-config.js               (Truffle configuration)
+|-- requirements.txt                (Python dependencies)
+|-- .env.example                    (Example environment variables)
+|-- README.md                       (Project documentation)
+
 ```
 ---
 
